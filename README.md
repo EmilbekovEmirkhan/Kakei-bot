@@ -60,7 +60,7 @@ venv\Scripts\activate
 ### 3. Install dependencies
 
 ```bash
-pip install fastapi uvicorn httpx python-dotenv google-genai
+pip install -r requirements.txt
 ```
 
 ### 4. Configure environment variables
@@ -71,6 +71,7 @@ Create a `.env` file in the project root:
 CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
 CHANNEL_SECRET=your_line_channel_secret
 GEMINI_API_KEY=your_gemini_api_key
+DATABASE_URL=postgresql://user:password@host:port/dbname
 ```
 
 | Variable | Where to find it |
@@ -78,6 +79,7 @@ GEMINI_API_KEY=your_gemini_api_key
 | `CHANNEL_ACCESS_TOKEN` | LINE Developers Console → your channel → Messaging API → Channel access token |
 | `CHANNEL_SECRET` | LINE Developers Console → your channel → Basic settings → Channel secret |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
+| `DATABASE_URL` | Railway → your project → Variables |
 
 ---
 
@@ -86,7 +88,7 @@ GEMINI_API_KEY=your_gemini_api_key
 ### Start the server
 
 ```bash
-uvicorn main:app --port 3000
+python3 -m uvicorn main:app --port 3000
 ```
 
 ### Expose it publicly with ngrok
@@ -110,7 +112,11 @@ https://<your-ngrok-subdomain>.ngrok-free.app/webhook
 You can test the Gemini parser locally without LINE:
 
 ```bash
-python test_receipt.py static\images\test.jpg
+# parse only
+python3 test_receipt.py static/images/Test.JPG
+
+# parse + save to DB
+python3 test_receipt.py static/images/Test.JPG --save
 ```
 
 This runs the parser directly on a local image and prints the structured JSON + formatted reply to the terminal.
@@ -123,10 +129,13 @@ This runs the parser directly on a local image and prints the structured JSON + 
 LINE-Budget-Tracker/
 ├── main.py              # FastAPI app, webhook handler, LINE API helpers
 ├── receipt_parser.py    # Gemini 2.5 Flash receipt parsing & reply formatting
+├── database.py          # PostgreSQL connection, tables, seed data, helpers
 ├── test_receipt.py      # CLI tool for local parser testing
+├── requirements.txt
+├── .env.example         # Template for environment variables
 ├── static/
 │   └── images/
-│       └── test.jpg     # Sample receipt image for testing
+│       └── Test.JPG     # Sample receipt image for testing
 └── .env                 # API keys (not committed to git)
 ```
 
@@ -152,7 +161,7 @@ When a receipt image is sent, the bot replies in this format:
 
 ### Supported categories
 
-`コンビニ` · `スーパー` · `レストラン` · `ドラッグストア` · `カフェ` · `百貨店` · `その他`
+`食費` · `交通費` · `日用品` · `カフェ` · `外食` · `ショッピング` · `その他`
 
 ### Supported payment methods
 
