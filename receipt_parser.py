@@ -16,8 +16,10 @@ Return ONLY valid JSON — no markdown, no code blocks, just raw JSON.
 Schema:
 {
   "store_name": "store name as printed on receipt",
-  "category": one of ["コンビニ", "スーパー", "レストラン", "ドラッグストア", "カフェ", "百貨店", "その他"],
-  "amount": total amount as integer in yen (numbers only, no symbols),
+  "category": one of ["食費", "交通費", "日用品", "カフェ", "外食", "ショッピング", "その他"],
+  "amount": subtotal before tax as integer in yen,
+  "tax_amount": tax amount as integer in yen or null,
+  "total_amount": final total including tax as integer in yen,
   "date": "YYYY-MM-DD" or null if not found,
   "payment_method": one of ["現金", "クレジットカード", "電子マネー", "QRコード", "不明"],
   "items": [{"name": "item name", "price": 0}]
@@ -65,8 +67,8 @@ def format_receipt_reply(data: dict) -> str:
         lines.append(f"📂 {data['category']}")
     if data.get("date"):
         lines.append(f"📅 {data['date']}")
-    if data.get("amount") is not None:
-        lines.append(f"💴 ¥{data['amount']:,}")
+    if data.get("total_amount") is not None:
+        lines.append(f"💴 ¥{data['total_amount']:,}")
     if data.get("payment_method"):
         lines.append(f"💳 {data['payment_method']}")
 
