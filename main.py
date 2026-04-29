@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from receipt_parser import parse_receipt_bytes, format_receipt_reply
 
-# ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv()
+
 CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN", "")
 CHANNEL_SECRET = os.environ.get("CHANNEL_SECRET", "")
 
@@ -20,13 +20,9 @@ LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content
 app = FastAPI()
 http_client = httpx.AsyncClient()
 
-# ── Signature verification ────────────────────────────────────────────────────
-
 def verify_signature(body: bytes, x_line_signature: str) -> bool:
     digest = hmac.new(CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
     return hmac.compare_digest(base64.b64encode(digest).decode(), x_line_signature)
-
-# ── Webhook ───────────────────────────────────────────────────────────────────
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -38,8 +34,6 @@ async def webhook(request: Request):
         await handle_event(event)
 
     return JSONResponse({"status": "ok"})
-
-# ── Event handlers ────────────────────────────────────────────────────────────
 
 async def handle_event(event: dict):
     if event.get("type") != "message":
@@ -62,8 +56,6 @@ async def handle_image_message(reply_token: str, message_id: str):
         reply_text = "レシートの読み取りに失敗しました。"
 
     await reply_message(reply_token, reply_text)
-
-# ── LINE helpers ──────────────────────────────────────────────────────────────
 
 async def download_image_from_line(message_id: str) -> bytes:
     url = LINE_CONTENT_URL.format(message_id=message_id)

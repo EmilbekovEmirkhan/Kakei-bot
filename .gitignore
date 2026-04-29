@@ -1,3 +1,2 @@
-credentials.json
-.env*.DNG
+.env
 __pycache__/
