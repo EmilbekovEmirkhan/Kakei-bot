@@ -2,12 +2,14 @@ import hashlib
 import hmac
 import base64
 import os
+import traceback
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from receipt_parser import parse_receipt_bytes, format_receipt_reply
+from contextlib import asynccontextmanager
 
 load_dotenv()
 
@@ -17,8 +19,16 @@ CHANNEL_SECRET = os.environ.get("CHANNEL_SECRET", "")
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content"
 
-app = FastAPI()
-http_client = httpx.AsyncClient()
+http_client: httpx.AsyncClient = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global http_client
+    async with httpx.AsyncClient() as client:
+        http_client = client
+        yield
+
+app = FastAPI(lifespan=lifespan)
 
 def verify_signature(body: bytes, x_line_signature: str) -> bool:
     digest = hmac.new(CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
@@ -52,7 +62,7 @@ async def handle_image_message(reply_token: str, message_id: str):
         image_bytes = await download_image_from_line(message_id)
         reply_text = format_receipt_reply(parse_receipt_bytes(image_bytes))
     except Exception as exc:
-        print(f"Image processing error: {exc}")
+        traceback.print_exc()
         reply_text = "レシートの読み取りに失敗しました。"
 
     await reply_message(reply_token, reply_text)
