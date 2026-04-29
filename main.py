@@ -100,24 +100,24 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str):
         image_bytes = await download_image_from_line(message_id)
         parsed = parse_receipt_bytes(image_bytes)
 
-        if user_id:
-            category_id = await get_category_id_by_name(parsed.get("category"))
-            payment_id = await get_payment_method_id_by_name(parsed.get("payment_method"))
-            place_id = await get_or_create_place(parsed.get("store_name"), category_id) if parsed.get("store_name") else None
-            amount = parsed.get("amount") or 0
-            tax_amount = parsed.get("tax_amount")
-            total_amount = parsed.get("total_amount") or amount
-
-            await save_transaction(
-                user_id=user_id,
-                date=parsed.get("date") or datetime.today().strftime("%Y-%m-%d"),
-                amount=amount,
-                tax_amount=tax_amount,
-                total_amount=total_amount,
-                category_id=category_id,
-                place_id=place_id,
-                payment_method_id=payment_id,
-            )
+        # TODO: add confirmation step before saving
+        # if user_id:
+        #     category_id = await get_category_id_by_name(parsed.get("category"))
+        #     payment_id = await get_payment_method_id_by_name(parsed.get("payment_method"))
+        #     place_id = await get_or_create_place(parsed.get("store_name"), category_id) if parsed.get("store_name") else None
+        #     amount = parsed.get("amount") or 0
+        #     tax_amount = parsed.get("tax_amount")
+        #     total_amount = parsed.get("total_amount") or amount
+        #     await save_transaction(
+        #         user_id=user_id,
+        #         date=parsed.get("date") or datetime.today().strftime("%Y-%m-%d"),
+        #         amount=amount,
+        #         tax_amount=tax_amount,
+        #         total_amount=total_amount,
+        #         category_id=category_id,
+        #         place_id=place_id,
+        #         payment_method_id=payment_id,
+        #     )
 
         reply_text = format_receipt_reply(parsed)
     except Exception as exc:
