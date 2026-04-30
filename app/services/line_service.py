@@ -6,7 +6,7 @@ from datetime import datetime
 
 import httpx
 from app.services.receipt_service import parse_receipt_bytes, format_receipt_reply
-from app.repositories.user_repo import upsert_user
+from app.repositories.user_repo import create_user, deactivate_user
 from app.repositories.transaction_repo import get_monthly_stats
 from app.config import CHANNEL_SECRET, CHANNEL_ACCESS_TOKEN
 
@@ -41,23 +41,22 @@ async def get_line_profile(user_id: str) -> dict:
 
 
 async def handle_event(event: dict):
-    if event.get("type") != "message":
+    event_type = event.get("type")
+
+    if event_type == "follow":
+        await handle_follow(event)
+        return
+
+    if event_type == "unfollow":
+        await handle_unfollow(event)
+        return
+
+    if event_type != "message":
         return
 
     message     = event.get("message", {})
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
-
-    if user_id:
-        try:
-            profile = await get_line_profile(user_id)
-            await upsert_user(
-                uid=user_id,
-                name=profile.get("displayName", ""),
-                language_code=profile.get("language", ""),
-            )
-        except Exception:
-            pass
 
     if message.get("type") == "image":
         await handle_image_message(reply_token, message["id"], user_id)
@@ -70,6 +69,27 @@ async def handle_event(event: dict):
         else:
             await reply_message(reply_token, f"You said: {message['text']}")
 
+
+async def handle_follow(event: dict):
+    user_id = event.get("source", {}).get("userId")
+    if not user_id:
+        return
+    try:
+        profile = await get_line_profile(user_id)
+    except Exception as e:
+        return
+    await create_user(
+        uid=user_id,
+        name=profile.get("displayName", ""),
+        language_code=profile.get("language", ""),
+    )
+
+
+async def handle_unfollow(event: dict):
+    user_id = event.get("source", {}).get("userId")
+    if not user_id:
+        return
+    await deactivate_user(user_id)
 
 async def handle_image_message(reply_token: str, message_id: str, user_id: str):
     try:
