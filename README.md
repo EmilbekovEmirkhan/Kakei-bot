@@ -88,7 +88,7 @@ DATABASE_URL=postgresql://user:password@host:port/dbname
 ### Start the server
 
 ```bash
-python3 -m uvicorn main:app --port 3000
+python3 -m uvicorn app.main:app --port 3000
 ```
 
 ### Expose it publicly with ngrok
@@ -113,10 +113,10 @@ You can test the Gemini parser locally without LINE:
 
 ```bash
 # parse only
-python3 test_receipt.py static/images/Test.JPG
+python3 -m tests.receipt_scan static/images/Test.JPG
 
 # parse + save to DB
-python3 test_receipt.py static/images/Test.JPG --save
+python3 -m tests.receipt_scan static/images/Test.JPG --save
 ```
 
 This runs the parser directly on a local image and prints the structured JSON + formatted reply to the terminal.
@@ -127,16 +127,42 @@ This runs the parser directly on a local image and prints the structured JSON + 
 
 ```
 LINE-Budget-Tracker/
-├── main.py              # FastAPI app, webhook handler, LINE API helpers
-├── receipt_parser.py    # Gemini 2.5 Flash receipt parsing & reply formatting
-├── database.py          # PostgreSQL connection, tables, seed data, helpers
-├── test_receipt.py      # CLI tool for local parser testing
-├── requirements.txt
-├── .env.example         # Template for environment variables
+├── app/
+│   ├── __init__.py
+│   ├── config.py                    # Environmental variables
+│   ├── main.py                      # FastAPI entry point, lifespan
+│   ├── db/
+│   │   ├── __init__.py
+│   │   ├── connection.py            # asyncpg pool management
+│   │   ├── init_db.py               # table creation + seeding
+│   │   └── migrations/
+│   │       ├── init_tables.sql      # CREATE TABLE statements
+│   │       └── seed.sql             # seed data (categories, payment methods)
+│   ├── repositories/                # DB reads/writes, one file per entity
+│   │   ├── __init__.py
+│   │   ├── user_repo.py
+│   │   ├── transaction_repo.py
+│   │   ├── category_repo.py
+│   │   ├── payment_method_repo.py
+│   │   └── place_repo.py
+│   ├── routers/                     # HTTP layer only
+│   │   ├── __init__.py
+│   │   └── webhook.py               # POST /webhook
+│   └── services/                    # Business logic
+│       ├── __init__.py
+│       ├── line_service.py          # LINE API, event handling
+│       └── receipt_service.py       # Gemini receipt parsing
 ├── static/
-│   └── images/
-│       └── Test.JPG     # Sample receipt image for testing
-└── .env                 # API keys (not committed to git)
+│       └── images/
+│           └── Test.JPG             # Sample receipt for testing
+├── tests/
+│   └── test_receipt.py              # CLI tool for local parser testing
+├── .env                             # API keys (not committed)
+├── .env.example                     # ENV template
+├── .gitignore
+├── Procfile                         # Heroku/Railway process config
+├── requirements.txt
+└── README.md
 ```
 
 ---

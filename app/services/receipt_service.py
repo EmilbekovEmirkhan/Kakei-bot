@@ -1,11 +1,11 @@
 """
-Receipt parser — Gemini 2.5 Flash
-Takes raw image bytes, returns structured dict.
+Receipt service — Gemini 2.5 Flash
+Takes raw image bytes, returns structured dict and formatted reply.
 """
 
 import json
-import os
 from google import genai
+from app.config import GEMINI_API_KEY
 
 PROMPT = """
 You are a receipt parser specialized in Japanese convenience store and retail receipts.
@@ -17,12 +17,10 @@ Schema:
 {
   "store_name": "store name as printed on receipt",
   "category": one of ["食費", "交通費", "日用品", "カフェ", "外食", "ショッピング", "その他"],
-  "amount": subtotal before tax as integer in yen,
-  "tax_amount": tax amount as integer in yen or null,
-  "total_amount": final total including tax as integer in yen,
+  "amount": final total paid as integer in yen including tax,
   "date": "YYYY-MM-DD" or null if not found,
   "payment_method": one of ["現金", "クレジットカード", "電子マネー", "QRコード", "不明"],
-  "items": [{"name": "item name", "price": 0}]
+  "items": [{"name": "item name", "price": integer or null}]
 }
 
 If a field cannot be determined, use null.
@@ -34,9 +32,9 @@ _client: genai.Client | None = None
 def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY", "")
+        api_key = GEMINI_API_KEY
         if not api_key:
-            raise RuntimeError("GEMINI_API_KEY is not set in .env")
+            raise RuntimeError("GEMINI_API_KEY is not set")
         _client = genai.Client(api_key=api_key)
     return _client
 
@@ -67,8 +65,8 @@ def format_receipt_reply(data: dict) -> str:
         lines.append(f"📂 {data['category']}")
     if data.get("date"):
         lines.append(f"📅 {data['date']}")
-    if data.get("total_amount") is not None:
-        lines.append(f"💴 ¥{data['total_amount']:,}")
+    if data.get("amount") is not None:
+        lines.append(f"💴 ¥{data['amount']:,}")
     if data.get("payment_method"):
         lines.append(f"💳 {data['payment_method']}")
 
