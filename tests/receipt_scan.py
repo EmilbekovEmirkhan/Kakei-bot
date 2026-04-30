@@ -1,30 +1,29 @@
 """
-Local test — no Line API, no deployment needed.
+Local test — no LINE API, no deployment needed.
 
 Usage:
-    python3 test_receipt.py receipt.jpg
-    python3 test_receipt.py              # will prompt for path
+    python3 tests/test_receipt.py receipt.jpg
 """
 
 import json
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
-from receipt_parser import parse_receipt_bytes, format_receipt_reply
-
-load_dotenv()
+from app.services.receipt_service import parse_receipt_bytes, format_receipt_reply
 
 SUPPORTED_MIME = {
     ".jpg":  "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png":  "image/png",
     ".webp": "image/webp",
-    ".dng":  "image/jpeg",  # treat DNG as jpeg for Gemini
+    ".dng":  "image/jpeg",
 }
 
+
 def main():
-    if len(sys.argv) > 1:
-        image_path = Path(sys.argv[1])
+    args = sys.argv[1:]
+
+    if args:
+        image_path = Path(args[0])
     else:
         image_path = Path(input("Receipt image path: ").strip().strip('"'))
 
@@ -48,6 +47,7 @@ def main():
 
     print("\n── Formatted reply ───────────────────────")
     print(format_receipt_reply(result))
+
 
 if __name__ == "__main__":
     main()
