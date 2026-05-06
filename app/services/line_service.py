@@ -217,15 +217,28 @@ def parse_postback_data(data: str) -> dict:
     return {key: values[0] for key, values in parsed.items()}
 
 
-def quick_reply_postback_item(label: str, data: str) -> dict:
+def quick_reply_postback_item(
+    label: str,
+    data: str,
+    input_option: str | None = None,
+    fill_in_text: str | None = None,
+) -> dict:
+    action = {
+        "type": "postback",
+        "label": label,
+        "data": data,
+        "displayText": label,
+    }
+
+    if input_option:
+        action["inputOption"] = input_option
+
+    if fill_in_text:
+        action["fillInText"] = fill_in_text
+
     return {
         "type": "action",
-        "action": {
-            "type": "postback",
-            "label": label,
-            "data": data,
-            "displayText": label,
-        }
+        "action": action,
     }
 
 async def start_manual_entry(reply_token: str, user_id: str):
@@ -385,7 +398,13 @@ async def ask_payment_method(reply_token: str, state: dict):
             payment_method_id=str(payment["id"]),
         )
 
-        items.append(quick_reply_postback_item(label, data))
+        items.append(
+            quick_reply_postback_item(
+                label,
+                data,
+                input_option="openKeyboard",
+            )
+        )
 
     message = {
         "type": "text",
