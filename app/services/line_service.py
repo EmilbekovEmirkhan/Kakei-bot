@@ -354,6 +354,68 @@ async def handle_postback(event: dict):
 
         await reply_message(reply_token, text)
         return
+    if step == "note_skip":
+        state = await get_manual_entry_state(user_id)
+
+        if not state:
+            await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
+            return
+
+        await save_manual_transaction(reply_token, user_id, state, note=None)
+        return
+
+    if step == "note_add":
+        state = await get_manual_entry_state(user_id)
+
+        if not state:
+            await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
+            return
+
+        state["step"] = "note"
+        await set_manual_entry_state(user_id, state)
+
+        await reply_message(
+            reply_token,
+            "メモを入力してください / Please enter a note"
+        )
+        return
+    
+async def save_manual_transaction(
+    reply_token: str,
+    user_id: str,
+    state: dict,
+    note: str | None,
+):
+    try:
+        transacted_at = datetime.strptime(state["date"], "%Y-%m-%d")
+
+        transaction_id = await save_transaction(
+            uid=user_id,
+            amount=state["amount"],
+            transacted_at=transacted_at,
+            category_id=state["category_id"],
+            payment_method_id=state["payment_method_id"],
+            receipt_image_url=None,
+            note=note,
+        )
+
+        await delete_manual_entry_state(user_id)
+
+        reply_text = (
+            "✅ 登録しました / Transaction saved\n\n"
+            f"ID: {transaction_id}\n"
+            f"日付: {state['date']}\n"
+            f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
+            f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n"
+            f"金額: ¥{state['amount']:,}\n"
+            f"メモ: {note or 'なし'}"
+        )
+
+        await reply_message(reply_token, reply_text)
+
+    except Exception:
+        traceback.print_exc()
+        await reply_message(reply_token, "保存に失敗しました。もう一度お試しください。")
     
 async def ask_category(reply_token: str, selected_date: str):
     items = []
@@ -426,6 +488,29 @@ def find_payment_method(payment_method_id: int) -> dict | None:
             return payment
     return None
 
+async def ask_note_option(reply_token: str):
+    message = {
+        "type": "text",
+        "text": (
+            "メモを追加しますか？ / Would you like to add a note?"
+        ),
+        "quickReply": {
+            "items": [
+                quick_reply_postback_item(
+                    label="スキップ",
+                    data=make_manual_postback_data("note_skip"),
+                ),
+                quick_reply_postback_item(
+                    label="メモを追加",
+                    data=make_manual_postback_data("note_add"),
+                    input_option="openKeyboard",
+                ),
+            ]
+        }
+    }
+
+    await reply_raw_message(reply_token, [message])
+
 async def handle_manual_text_input(
     reply_token: str,
     user_id: str,
@@ -452,46 +537,17 @@ async def handle_manual_text_input(
 
         await set_manual_entry_state(user_id, state)
 
-        await reply_message(
-            reply_token,
-            "メモを入力してください / Please enter a note\n\n"
-            "メモがない場合は「なし」と送ってください。"
-        )
+        await ask_note_option(reply_token)
         return
 
     if step == "note":
-        note = None if text in ["なし", "無し", "no", "No", "NO", "-"] else text
+        note = text.strip()
 
-        try:
-            transacted_at = datetime.strptime(state["date"], "%Y-%m-%d")
+        if not note:
+            await reply_message(reply_token, "メモを入力するか、「スキップ」を選択してください。")
+            return
 
-            transaction_id = await save_transaction(
-                uid=user_id,
-                amount=state["amount"],
-                transacted_at=transacted_at,
-                category_id=state["category_id"],
-                payment_method_id=state["payment_method_id"],
-                receipt_image_url=None,
-                note=note,
-            )
-
-            await delete_manual_entry_state(user_id)
-
-            reply_text = (
-                "✅ 登録しました / Transaction saved\n\n"
-                f"ID: {transaction_id}\n"
-                f"日付: {state['date']}\n"
-                f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
-                f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n"
-                f"金額: ¥{state['amount']:,}\n"
-                f"メモ: {note or 'なし'}"
-            )
-            await reply_message(reply_token, reply_text)
-
-        except Exception:
-            traceback.print_exc()
-            await reply_message(reply_token, "保存に失敗しました。もう一度お試しください。")
-
+        await save_manual_transaction(reply_token, user_id, state, note=note)
         return
 
     await reply_message(reply_token, "入力状態が正しくありません。「手動で入力」からもう一度始めてください。")
