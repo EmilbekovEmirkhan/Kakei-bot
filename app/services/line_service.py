@@ -7,7 +7,6 @@ from datetime import datetime
 import httpx
 from app.services.receipt_service import parse_receipt_bytes, format_receipt_reply
 from app.repositories.user_repo import create_user, deactivate_user
-from app.repositories.transaction_repo import get_monthly_stats
 from app.config import CHANNEL_SECRET, CHANNEL_ACCESS_TOKEN
 
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
@@ -62,9 +61,7 @@ async def handle_event(event: dict):
         await handle_image_message(reply_token, message["id"], user_id)
     elif message.get("type") == "text":
         text = message["text"].strip()
-        if text == "統計":
-            await handle_stats(reply_token, user_id)
-        elif text == "使い方":
+        if text == "使い方":
             await handle_how_to_use(reply_token)
         else:
             await reply_message(reply_token, f"You said: {message['text']}")
@@ -101,31 +98,6 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str):
         reply_text = "レシートの読み取りに失敗しました。"
 
     await reply_message(reply_token, reply_text)
-
-
-async def handle_stats(reply_token: str, user_id: str | None):
-    if not user_id:
-        await reply_message(reply_token, "ユーザー情報が取得できませんでした。")
-        return
-    try:
-        stats = await get_monthly_stats(user_id)
-        if not stats:
-            await reply_message(reply_token, "今月のデータがありません。")
-            return
-
-        total = sum(r["total"] for r in stats)
-        month = datetime.today().strftime("%Y年%-m月")
-        lines = [f"📊 {month}の統計\n"]
-        for r in stats:
-            pct = round(r["total"] / total * 100)
-            lines.append(f"{r['icon']} {r['name']:<8} ¥{r['total']:,} ({pct}%)")
-        lines.append(f"\n合計: ¥{total:,}")
-
-        await reply_message(reply_token, "\n".join(lines))
-    except Exception:
-        traceback.print_exc()
-        await reply_message(reply_token, "統計の取得に失敗しました。")
-
 
 async def handle_how_to_use(reply_token: str):
     text = (
