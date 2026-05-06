@@ -143,8 +143,7 @@ LINE-Budget-Tracker/
 │   │   ├── user_repo.py
 │   │   ├── transaction_repo.py
 │   │   ├── category_repo.py
-│   │   ├── payment_method_repo.py
-│   │   └── place_repo.py
+│   │   └── payment_method_repo.py
 │   ├── routers/                     # HTTP layer only
 │   │   ├── __init__.py
 │   │   └── webhook.py               # POST /webhook
