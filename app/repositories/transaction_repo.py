@@ -15,7 +15,7 @@ async def save_transaction(
         row = await conn.fetchrow("""
             INSERT INTO transactions
                 (uid, amount, transacted_at, category_id, payment_method_id, receipt_image_url, note)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
         """, uid, amount, transacted_at, category_id, payment_method_id, receipt_image_url, note)
         return row["id"]
