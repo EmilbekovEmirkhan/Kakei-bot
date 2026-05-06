@@ -79,9 +79,11 @@ async def handle_event(event: dict):
         await handle_postback(event)
         return
 
-    if event_type != "message":
+    if event_type == "message":
+        await handle_message(event)
         return
-
+    
+async def handle_message(event: dict):
     message     = event.get("message", {})
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
@@ -89,28 +91,33 @@ async def handle_event(event: dict):
     if not reply_token or not user_id:
         return
 
-    if message.get("type") == "image":
+    message_type = message.get("type")
+
+    if message_type == "image":
         await handle_image_message(reply_token, message["id"], user_id)
         return
 
-    if message.get("type") == "text":
-        text = message["text"].strip()
+    if message_type == "text":
+        await handle_text_message(reply_token, user_id, message)
+        return
+    
+async def handle_text_message(reply_token: str, user_id: str, message: dict):
+    text = message.get("text", "").strip()
 
-        if text == "使い方":
-            await handle_how_to_use(reply_token)
-            return
+    if text == "使い方":
+        await handle_how_to_use(reply_token)
+        return
 
-        if text == "手動で入力":
-            await start_manual_entry(reply_token, user_id)
-            return
+    if text == "手動で入力":
+        await start_manual_entry(reply_token, user_id)
+        return
 
-        manual_state = await get_manual_entry_state(user_id)
-        if manual_state:
-            await handle_manual_text_input(reply_token, user_id, text, manual_state)
-            return
+    manual_state = await get_manual_entry_state(user_id)
+    if manual_state:
+        await handle_manual_text_input(reply_token, user_id, text, manual_state)
+        return
 
-        await reply_message(reply_token, f"You said: {message['text']}")
-
+    await reply_message(reply_token, f"You said: {text}")
 
 async def handle_follow(event: dict):
     user_id = event.get("source", {}).get("userId")
