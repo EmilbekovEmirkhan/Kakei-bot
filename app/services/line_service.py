@@ -3,11 +3,36 @@ import hmac
 import base64
 import traceback
 from datetime import datetime
+from urllib.parse import urlencode, parse_qs
 
 import httpx
 from app.services.receipt_service import parse_receipt_bytes, format_receipt_reply
 from app.repositories.user_repo import create_user, deactivate_user
+from app.repositories.transaction_repo import save_transaction
+from app.services.line_state_service import (
+    set_manual_entry_state,
+    get_manual_entry_state,
+    delete_manual_entry_state,
+)
 from app.config import CHANNEL_SECRET, CHANNEL_ACCESS_TOKEN
+
+CATEGORIES = [
+    {"id": 1, "name": "食費", "icon": "🍱"},
+    {"id": 2, "name": "交通費", "icon": "🚃"},
+    {"id": 3, "name": "日用品", "icon": "🛒"},
+    {"id": 4, "name": "カフェ", "icon": "☕"},
+    {"id": 5, "name": "外食", "icon": "🍜"},
+    {"id": 6, "name": "ショッピング", "icon": "🛍️"},
+    {"id": 7, "name": "その他", "icon": "📦"},
+]
+
+PAYMENT_METHODS = [
+    {"id": 1, "name": "現金", "icon": "💴"},
+    {"id": 2, "name": "クレジットカード", "icon": "💳"},
+    {"id": 3, "name": "電子マネー", "icon": "📱"},
+    {"id": 4, "name": "QRコード", "icon": "📲"},
+    {"id": 5, "name": "不明", "icon": "❓"},
+]
 
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content"
@@ -50,6 +75,10 @@ async def handle_event(event: dict):
         await handle_unfollow(event)
         return
 
+    if event_type == "postback":
+        await handle_postback(event)
+        return
+
     if event_type != "message":
         return
 
@@ -57,14 +86,30 @@ async def handle_event(event: dict):
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
 
+    if not reply_token or not user_id:
+        return
+
     if message.get("type") == "image":
         await handle_image_message(reply_token, message["id"], user_id)
-    elif message.get("type") == "text":
+        return
+
+    if message.get("type") == "text":
         text = message["text"].strip()
+
         if text == "使い方":
             await handle_how_to_use(reply_token)
-        else:
-            await reply_message(reply_token, f"You said: {message['text']}")
+            return
+
+        if text == "手動で入力":
+            await start_manual_entry(reply_token, user_id)
+            return
+
+        manual_state = await get_manual_entry_state(user_id)
+        if manual_state:
+            await handle_manual_text_input(reply_token, user_id, text, manual_state)
+            return
+
+        await reply_message(reply_token, f"You said: {message['text']}")
 
 
 async def handle_follow(event: dict):
@@ -134,3 +179,294 @@ async def reply_message(reply_token: str, text: str):
         json=payload,
     )
     response.raise_for_status()
+
+async def reply_raw_message(reply_token: str, messages: list[dict]):
+    payload = {
+        "replyToken": reply_token,
+        "messages": messages,
+    }
+
+    response = await _http_client.post(
+        LINE_REPLY_URL,
+        headers={
+            "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+    )
+    response.raise_for_status()
+
+def make_manual_postback_data(step: str, **kwargs) -> str:
+    payload = {
+        "flow": "manual",
+        "step": step,
+        **kwargs,
+    }
+    return urlencode(payload)
+
+
+def parse_postback_data(data: str) -> dict:
+    parsed = parse_qs(data)
+    return {key: values[0] for key, values in parsed.items()}
+
+
+def quick_reply_postback_item(label: str, data: str) -> dict:
+    return {
+        "type": "action",
+        "action": {
+            "type": "postback",
+            "label": label,
+            "data": data,
+            "displayText": label,
+        }
+    }
+
+async def start_manual_entry(reply_token: str, user_id: str):
+    await set_manual_entry_state(user_id, {
+        "step": "date",
+    })
+
+    message = {
+        "type": "text",
+        "text": "日付を選択してください / Please choose a date",
+        "quickReply": {
+            "items": [
+                {
+                    "type": "action",
+                    "action": {
+                        "type": "datetimepicker",
+                        "label": "日付を選ぶ",
+                        "data": make_manual_postback_data("date"),
+                        "mode": "date",
+                    }
+                }
+            ]
+        }
+    }
+
+    await reply_raw_message(reply_token, [message])
+
+async def handle_postback(event: dict):
+    reply_token = event.get("replyToken")
+    user_id = event.get("source", {}).get("userId")
+
+    if not reply_token or not user_id:
+        return
+
+    postback = event.get("postback", {})
+    data = parse_postback_data(postback.get("data", ""))
+
+    if data.get("flow") != "manual":
+        return
+
+    step = data.get("step")
+
+    if step == "date":
+        selected_date = postback.get("params", {}).get("date")
+
+        if not selected_date:
+            await reply_message(reply_token, "日付を取得できませんでした。もう一度お試しください。")
+            return
+
+        await set_manual_entry_state(user_id, {
+            "step": "category",
+            "date": selected_date,
+        })
+
+        await ask_category(reply_token, selected_date)
+        return
+
+    if step == "category":
+        state = await get_manual_entry_state(user_id)
+
+        if not state:
+            await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
+            return
+
+        category_id = int(data["category_id"])
+        category = find_category(category_id)
+
+        if not category:
+            await reply_message(reply_token, "カテゴリを取得できませんでした。もう一度お試しください。")
+            return
+
+        state.update({
+            "step": "payment",
+            "category_id": category_id,
+            "category_name": category["name"],
+            "category_icon": category["icon"],
+        })
+
+        await set_manual_entry_state(user_id, state)
+        await ask_payment_method(reply_token, state)
+        return
+
+    if step == "payment":
+        state = await get_manual_entry_state(user_id)
+
+        if not state:
+            await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
+            return
+
+        payment_method_id = int(data["payment_method_id"])
+        payment = find_payment_method(payment_method_id)
+
+        if not payment:
+            await reply_message(reply_token, "支払方法を取得できませんでした。もう一度お試しください。")
+            return
+
+        state.update({
+            "step": "amount",
+            "payment_method_id": payment_method_id,
+            "payment_method_name": payment["name"],
+            "payment_method_icon": payment["icon"],
+        })
+
+        await set_manual_entry_state(user_id, state)
+
+        text = (
+            "金額を入力してください / Please enter the amount\n\n"
+            f"日付: {state['date']}\n"
+            f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
+            f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n\n"
+            "例: 1200"
+        )
+
+        await reply_message(reply_token, text)
+        return
+    
+async def ask_category(reply_token: str, selected_date: str):
+    items = []
+
+    for category in CATEGORIES:
+        label = f"{category['icon']} {category['name']}"
+
+        data = make_manual_postback_data(
+            "category",
+            category_id=str(category["id"]),
+        )
+
+        items.append(quick_reply_postback_item(label, data))
+
+    message = {
+        "type": "text",
+        "text": (
+            "カテゴリを選択してください / Please choose a category\n\n"
+            f"日付: {selected_date}"
+        ),
+        "quickReply": {
+            "items": items
+        }
+    }
+
+    await reply_raw_message(reply_token, [message])
+
+def find_category(category_id: int) -> dict | None:
+    for category in CATEGORIES:
+        if category["id"] == category_id:
+            return category
+    return None
+
+async def ask_payment_method(reply_token: str, state: dict):
+    items = []
+
+    for payment in PAYMENT_METHODS:
+        label = f"{payment['icon']} {payment['name']}"
+
+        data = make_manual_postback_data(
+            "payment",
+            payment_method_id=str(payment["id"]),
+        )
+
+        items.append(quick_reply_postback_item(label, data))
+
+    message = {
+        "type": "text",
+        "text": (
+            "支払方法を選択してください / Please choose payment method\n\n"
+            f"日付: {state['date']}\n"
+            f"カテゴリ: {state['category_icon']} {state['category_name']}"
+        ),
+        "quickReply": {
+            "items": items
+        }
+    }
+
+    await reply_raw_message(reply_token, [message])
+
+def find_payment_method(payment_method_id: int) -> dict | None:
+    for payment in PAYMENT_METHODS:
+        if payment["id"] == payment_method_id:
+            return payment
+    return None
+
+async def handle_manual_text_input(
+    reply_token: str,
+    user_id: str,
+    text: str,
+    state: dict,
+):
+    step = state.get("step")
+
+    if step == "amount":
+        amount_text = (
+            text
+            .replace(",", "")
+            .replace("円", "")
+            .replace("¥", "")
+            .strip()
+        )
+
+        if not amount_text.isdigit():
+            await reply_message(reply_token, "金額は数字で入力してください。\n例: 1200")
+            return
+
+        state["amount"] = int(amount_text)
+        state["step"] = "note"
+
+        await set_manual_entry_state(user_id, state)
+
+        await reply_message(
+            reply_token,
+            "メモを入力してください / Please enter a note\n\n"
+            "メモがない場合は「なし」と送ってください。"
+        )
+        return
+
+    if step == "note":
+        note = None if text in ["なし", "無し", "no", "No", "NO", "-"] else text
+
+        try:
+            transacted_at = datetime.strptime(state["date"], "%Y-%m-%d")
+
+            transaction_id = await save_transaction(
+                uid=user_id,
+                amount=state["amount"],
+                transacted_at=transacted_at,
+                category_id=state["category_id"],
+                payment_method_id=state["payment_method_id"],
+                receipt_image_url=None,
+                note=note,
+            )
+
+            await delete_manual_entry_state(user_id)
+
+            reply_text = (
+                "✅ 登録しました / Transaction saved\n\n"
+                f"ID: {transaction_id}\n"
+                f"日付: {state['date']}\n"
+                f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
+                f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n"
+                f"金額: ¥{state['amount']:,}\n"
+                f"メモ: {note or 'なし'}"
+            )
+            await reply_message(reply_token, reply_text)
+
+        except Exception:
+            traceback.print_exc()
+            await reply_message(reply_token, "保存に失敗しました。もう一度お試しください。")
+
+        return
+
+    await reply_message(reply_token, "入力状態が正しくありません。「手動で入力」からもう一度始めてください。")
+    await delete_manual_entry_state(user_id)
