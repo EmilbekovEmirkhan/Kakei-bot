@@ -19,6 +19,7 @@ A LINE chatbot that scans Japanese receipt images using **Gemini 2.5 Flash** and
 |---|---|
 | Runtime | Python 3.10+ |
 | Web framework | FastAPI + Uvicorn |
+| Database | Postgres + Redis |
 | LINE integration | LINE Messaging API |
 | AI / OCR | Google Gemini 2.5 Flash |
 | HTTP client | httpx (async) |
@@ -72,6 +73,7 @@ CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
 CHANNEL_SECRET=your_line_channel_secret
 GEMINI_API_KEY=your_gemini_api_key
 DATABASE_URL=postgresql://user:password@host:port/dbname
+REDIS_URL=redis://default:password@host:port
 ```
 
 | Variable | Where to find it |
@@ -80,6 +82,7 @@ DATABASE_URL=postgresql://user:password@host:port/dbname
 | `CHANNEL_SECRET` | LINE Developers Console → your channel → Basic settings → Channel secret |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
 | `DATABASE_URL` | Railway → your project → Variables |
+| `REDIS_URL` | Railway → your project → Variables |
 
 ---
 
@@ -143,8 +146,7 @@ LINE-Budget-Tracker/
 │   │   ├── user_repo.py
 │   │   ├── transaction_repo.py
 │   │   ├── category_repo.py
-│   │   ├── payment_method_repo.py
-│   │   └── place_repo.py
+│   │   └── payment_method_repo.py
 │   ├── routers/                     # HTTP layer only
 │   │   ├── __init__.py
 │   │   └── webhook.py               # POST /webhook
