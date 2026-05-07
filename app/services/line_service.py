@@ -356,12 +356,14 @@ async def handle_postback(event: dict):
         return
     if step == "note_skip":
         state = await get_manual_entry_state(user_id)
-
         if not state:
             await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
             return
 
-        await save_manual_transaction(reply_token, user_id, state, note=None)
+        state["note"] = None
+        state["step"] = "confirm"
+        await set_manual_entry_state(user_id, state)
+        await ask_confirm(reply_token, state)
         return
 
     if step == "note_add":
@@ -380,6 +382,19 @@ async def handle_postback(event: dict):
         )
         return
     
+    if step == "confirm":
+        state = await get_manual_entry_state(user_id)
+        if not state:
+            await reply_message(reply_token, "入力セッションが期限切れです。「手動で入力」からもう一度始めてください。")
+            return
+        await save_manual_transaction(reply_token, user_id, state, note=state.get("note"))
+        return
+
+    if step == "restart":
+        await delete_manual_entry_state(user_id)
+        await start_manual_entry(reply_token, user_id)
+        return
+
 async def save_manual_transaction(
     reply_token: str,
     user_id: str,
@@ -511,6 +526,33 @@ async def ask_note_option(reply_token: str):
 
     await reply_raw_message(reply_token, [message])
 
+async def ask_confirm(reply_token: str, state: dict):
+    note_display = state.get("note") or "なし"
+    message = {
+        "type": "text",
+        "text": (
+            "以下の内容で登録しますか？ / Confirm your entry:\n\n"
+            f"日付: {state['date']}\n"
+            f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
+            f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n"
+            f"金額: ¥{state['amount']:,}\n"
+            f"メモ: {note_display}"
+        ),
+        "quickReply": {
+            "items": [
+                quick_reply_postback_item(
+                    label="✅ 確認",
+                    data=make_manual_postback_data("confirm"),
+                ),
+                quick_reply_postback_item(
+                    label="🔄 やり直す",
+                    data=make_manual_postback_data("restart"),
+                ),
+            ]
+        },
+    }
+    await reply_raw_message(reply_token, [message])
+
 async def handle_manual_text_input(
     reply_token: str,
     user_id: str,
@@ -542,12 +584,14 @@ async def handle_manual_text_input(
 
     if step == "note":
         note = text.strip()
-
         if not note:
             await reply_message(reply_token, "メモを入力するか、「スキップ」を選択してください。")
             return
 
-        await save_manual_transaction(reply_token, user_id, state, note=note)
+        state["note"] = note
+        state["step"] = "confirm"
+        await set_manual_entry_state(user_id, state)
+        await ask_confirm(reply_token, state)
         return
 
     await reply_message(reply_token, "入力状態が正しくありません。「手動で入力」からもう一度始めてください。")
