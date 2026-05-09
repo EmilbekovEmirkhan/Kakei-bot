@@ -1,6 +1,49 @@
 from app.db.connection import get_pool
 
 
+async def get_monthly_stats(uid: str, year: int, month: int) -> dict:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        total_row = await conn.fetchrow("""
+            SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
+            FROM transactions
+            WHERE uid = $1
+              AND EXTRACT(YEAR  FROM transacted_at) = $2
+              AND EXTRACT(MONTH FROM transacted_at) = $3
+        """, uid, year, month)
+
+        category_rows = await conn.fetch("""
+            SELECT
+                c.name  AS category_name,
+                c.icon  AS category_icon,
+                COALESCE(SUM(t.amount), 0) AS subtotal,
+                COUNT(*) AS count
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id
+            WHERE t.uid = $1
+              AND EXTRACT(YEAR  FROM t.transacted_at) = $2
+              AND EXTRACT(MONTH FROM t.transacted_at) = $3
+            GROUP BY c.id, c.name, c.icon
+            ORDER BY subtotal DESC
+        """, uid, year, month)
+
+        return {
+            "year":  year,
+            "month": month,
+            "total": int(total_row["total"]),
+            "count": int(total_row["count"]),
+            "by_category": [
+                {
+                    "name":     row["category_name"] or "その他",
+                    "icon":     row["category_icon"] or "📦",
+                    "subtotal": int(row["subtotal"]),
+                    "count":    int(row["count"]),
+                }
+                for row in category_rows
+            ],
+        }
+
+
 async def save_transaction(
     uid: str,
     amount: int,

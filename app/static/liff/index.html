@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家計 — マイプロフィール</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:      #06C755;
+      --green-dark: #04A843;
+      --green-bg:   #E8FAF0;
+      --text:       #1a1a1a;
+      --sub:        #666;
+      --card-bg:    #ffffff;
+      --border:     #e0e0e0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+      background: var(--green-bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--green);
+      color: #fff;
+      padding: 20px 16px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    header .logo span { font-size: 13px; font-weight: 400; opacity: .8; margin-left: 6px; }
+    header .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      object-fit: cover; border: 2px solid rgba(255,255,255,.5);
+      margin-left: auto;
+    }
+
+    /* ── Month nav ── */
+    .month-nav {
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+      padding: 14px 16px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+    }
+    .month-nav button {
+      background: none; border: none; font-size: 20px; cursor: pointer;
+      color: var(--green); padding: 4px 8px; border-radius: 6px;
+      transition: background .15s;
+    }
+    .month-nav button:hover { background: var(--green-bg); }
+    .month-nav .label { font-size: 15px; font-weight: 600; min-width: 120px; text-align: center; }
+
+    /* ── Cards ── */
+    .container { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .card-title { font-size: 12px; color: var(--sub); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+
+    /* ── Total ── */
+    .total-amount {
+      font-size: 36px; font-weight: 800; color: var(--green-dark);
+      letter-spacing: -1px;
+    }
+    .total-amount .yen { font-size: 22px; font-weight: 600; }
+    .total-meta { font-size: 13px; color: var(--sub); margin-top: 4px; }
+
+    /* ── Category bars ── */
+    .cat-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+    .cat-row { display: flex; flex-direction: column; gap: 4px; }
+    .cat-header { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+    .cat-name { display: flex; align-items: center; gap: 6px; }
+    .cat-amount { font-weight: 700; font-size: 13px; }
+    .cat-pct-text { font-size: 11px; color: var(--sub); }
+    .bar-track { background: var(--green-bg); border-radius: 99px; height: 7px; overflow: hidden; }
+    .bar-fill  { background: var(--green); height: 100%; border-radius: 99px; transition: width .5s ease; }
+
+    /* ── Loading / Error ── */
+    .state-box {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 60px 16px; gap: 12px; color: var(--sub); text-align: center;
+    }
+    .state-box .icon { font-size: 40px; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--green-bg);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Empty ── */
+    .empty { color: var(--sub); font-size: 14px; text-align: center; padding: 16px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">家計<span>Kakei</span></div>
+  <img id="avatar" class="avatar" src="" alt="" style="display:none" />
+</header>
+
+<div class="month-nav">
+  <button id="prev-btn" onclick="changeMonth(-1)">‹</button>
+  <div class="label" id="month-label">読み込み中...</div>
+  <button id="next-btn" onclick="changeMonth(+1)">›</button>
+</div>
+
+<div class="container" id="main">
+  <div class="state-box"><div class="spinner"></div><div>データを取得中</div></div>
+</div>
+
+<script>
+  const LIFF_ID = "{{LIFF_ID}}";
+
+  let currentYear  = new Date().getFullYear();
+  let currentMonth = new Date().getMonth() + 1;
+  let accessToken  = null;
+
+  // ── Init ──────────────────────────────────────────────
+  liff.init({ liffId: LIFF_ID })
+    .then(() => {
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      accessToken = liff.getAccessToken();
+
+      // Show avatar
+      const profile = liff.getDecodedIDToken();
+      if (profile && profile.picture) {
+        const img = document.getElementById("avatar");
+        img.src = profile.picture;
+        img.style.display = "block";
+      }
+
+      loadStats();
+    })
+    .catch(err => showError("LIFF初期化エラー: " + err.message));
+
+  // ── Month navigation ──────────────────────────────────
+  function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 12) { currentMonth = 1;  currentYear++; }
+    if (currentMonth < 1)  { currentMonth = 12; currentYear--; }
+
+    // Disable future months
+    const now = new Date();
+    if (currentYear > now.getFullYear() ||
+        (currentYear === now.getFullYear() && currentMonth > now.getMonth() + 1)) {
+      currentMonth -= delta; // undo
+      return;
+    }
+    loadStats();
+  }
+
+  function updateMonthLabel() {
+    const MONTHS_JA = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+    document.getElementById("month-label").textContent =
+      `${currentYear}年 ${MONTHS_JA[currentMonth - 1]}`;
+
+    // Show/hide next button
+    const now = new Date();
+    const atNow = currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1;
+    document.getElementById("next-btn").style.visibility = atNow ? "hidden" : "visible";
+  }
+
+  // ── Fetch stats ───────────────────────────────────────
+  async function loadStats() {
+    updateMonthLabel();
+    setLoading();
+    try {
+      const resp = await fetch(`/api/stats?year=${currentYear}&month=${currentMonth}`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!resp.ok) throw new Error("サーバーエラー " + resp.status);
+      const data = await resp.json();
+      renderStats(data);
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function renderStats(data) {
+    const main = document.getElementById("main");
+
+    if (data.count === 0) {
+      main.innerHTML = `
+        <div class="card">
+          <div class="empty">📭 この月のデータはありません</div>
+        </div>`;
+      return;
+    }
+
+    const total = data.total;
+    const cats  = data.by_category;
+
+    // Category bars HTML
+    let catsHtml = "";
+    cats.forEach(cat => {
+      const pct = total > 0 ? Math.round((cat.subtotal / total) * 100) : 0;
+      catsHtml += `
+        <div class="cat-row">
+          <div class="cat-header">
+            <div class="cat-name">
+              <span>${cat.icon}</span>
+              <span>${cat.name}</span>
+            </div>
+            <div style="text-align:right">
+              <div class="cat-amount">¥${cat.subtotal.toLocaleString()}</div>
+              <div class="cat-pct-text">${pct}% · ${cat.count}件</div>
+            </div>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+    });
+
+    main.innerHTML = `
+      <div class="card">
+        <div class="card-title">月合計</div>
+        <div class="total-amount"><span class="yen">¥</span>${total.toLocaleString()}</div>
+        <div class="total-meta">${data.count}件の支出</div>
+      </div>
+      <div class="card">
+        <div class="card-title">カテゴリ別</div>
+        <div class="cat-list">${catsHtml}</div>
+      </div>`;
+  }
+
+  function setLoading() {
+    document.getElementById("main").innerHTML =
+      `<div class="state-box"><div class="spinner"></div><div>データを取得中</div></div>`;
+  }
+
+  function showError(msg) {
+    document.getElementById("main").innerHTML =
+      `<div class="state-box"><div class="icon">⚠️</div><div>${msg}</div></div>`;
+  }
+</script>
+</body>
+</html>
