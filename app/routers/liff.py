@@ -1,24 +1,29 @@
 from datetime import datetime
+from pathlib import Path
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.repositories.transaction_repo import get_monthly_stats
+from app.config import LIFF_ID
+from app.repositories.transaction_repo import get_monthly_stats, delete_transaction
+from app.services.line_service import get_http_client
 
 router = APIRouter()
 
 LINE_PROFILE_URL = "https://api.line.me/v2/profile"
+_LIFF_HTML_CONTENT = (
+    (Path(__file__).parent.parent / "static" / "liff" / "index.html")
+    .read_text(encoding="utf-8")
+    .replace("{{LIFF_ID}}", LIFF_ID)
+)
 
 
 async def _verify_line_token(access_token: str) -> str:
-    """Verify LINE access token and return uid."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            LINE_PROFILE_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=5.0,
-        )
+    resp = await get_http_client().get(
+        LINE_PROFILE_URL,
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=5.0,
+    )
     if resp.status_code != 200:
         raise HTTPException(status_code=401, detail="Invalid LINE access token")
     return resp.json()["userId"]
@@ -34,7 +39,6 @@ async def api_stats(request: Request):
     uid = await _verify_line_token(access_token)
 
     now = datetime.now()
-    # Support ?year=YYYY&month=MM query params for history browsing
     try:
         year  = int(request.query_params.get("year",  now.year))
         month = int(request.query_params.get("month", now.month))
@@ -45,9 +49,19 @@ async def api_stats(request: Request):
     return JSONResponse(stats)
 
 
+@router.delete("/api/transaction/{transaction_id}")
+async def api_delete_transaction(transaction_id: int, request: Request):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    uid = await _verify_line_token(auth.removeprefix("Bearer "))
+    deleted = await delete_transaction(uid, transaction_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return JSONResponse({"ok": True})
+
+
 @router.get("/liff", response_class=HTMLResponse)
 async def liff_page():
-    from app.config import LIFF_ID
-    with open("app/static/liff/index.html", encoding="utf-8") as f:
-        html = f.read().replace("{{LIFF_ID}}", LIFF_ID)
-    return HTMLResponse(html)
+    return HTMLResponse(_LIFF_HTML_CONTENT)

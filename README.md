@@ -1,15 +1,16 @@
-# 🧾 LINE Budget Tracker
+# 🧾 Kakei (家計) — LINE Budget Tracker
 
-A LINE chatbot that scans Japanese receipt images using **Gemini 2.5 Flash** and replies with a structured spending summary — store name, category, date, total, payment method, and itemized breakdown.
+A LINE chatbot that scans Japanese receipt images with **Gemini 2.5 Flash**, saves transactions to PostgreSQL, and shows monthly spending breakdowns inside LINE via a LIFF miniapp.
 
 ---
 
 ## ✨ How It Works
 
 1. User sends a receipt photo in LINE
-2. The bot downloads the image via LINE Content API
-3. **Gemini 2.5 Flash** parses the receipt into structured JSON
-4. The bot replies with a formatted spending summary
+2. Bot downloads the image via LINE Content API
+3. **Gemini 2.5 Flash** parses the receipt → structured JSON (store, amount, category, date, payment method)
+4. Bot asks the user to confirm or edit before saving
+5. User opens **マイプロフィール** (My Profile) in the LINE menu → LIFF miniapp shows monthly stats by category, with per-transaction accordion and delete
 
 ---
 
@@ -17,45 +18,45 @@ A LINE chatbot that scans Japanese receipt images using **Gemini 2.5 Flash** and
 
 | Layer | Technology |
 |---|---|
-| Runtime | Python 3.10+ |
+| Runtime | Python 3.14 |
 | Web framework | FastAPI + Uvicorn |
-| Database | Postgres + Redis |
-| LINE integration | LINE Messaging API |
+| Database | PostgreSQL (Railway) |
+| Session state | Redis (Railway) |
+| LINE integration | LINE Messaging API + LINE Login (LIFF) |
 | AI / OCR | Google Gemini 2.5 Flash |
 | HTTP client | httpx (async) |
-| Tunneling | ngrok |
+| Tunneling (dev) | ngrok |
 
 ---
 
 ## 📋 Prerequisites
 
-- Python 3.10+
-- A [LINE Developer account](https://developers.line.biz/) with a Messaging API channel
-- A [Google AI Studio](https://aistudio.google.com/) API key (Gemini)
+- Python 3.14
+- [LINE Developer account](https://developers.line.biz/) with **two channels**:
+  - **Messaging API channel** — for the chatbot
+  - **LINE Login channel** — for the LIFF miniapp
+- [Google AI Studio](https://aistudio.google.com/) API key (Gemini)
+- PostgreSQL database (Railway recommended)
+- Redis instance (Railway recommended)
 - [ngrok](https://ngrok.com/) installed
 
 ---
 
-## 🚀 Setup & Installation
+## 🚀 Setup
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/TemirlanSadykov/LINE-Budget-Tracker
 cd LINE-Budget-Tracker
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Virtual environment
 
 ```bash
-# Create venv
-python -m venv venv
-
-# Activate — macOS / Linux
-source venv/bin/activate
-
-# Activate — Windows
-venv\Scripts\activate
+python3.14 -m venv venv
+source venv/bin/activate        # macOS / Linux
+# venv\Scripts\activate         # Windows
 ```
 
 ### 3. Install dependencies
@@ -64,65 +65,92 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Environment variables
 
-Create a `.env` file in the project root:
+Copy the template and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+`.env` contents:
 
 ```env
-CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
-CHANNEL_SECRET=your_line_channel_secret
+CHANNEL_ACCESS_TOKEN=your_messaging_api_channel_access_token
+CHANNEL_SECRET=your_messaging_api_channel_secret
 GEMINI_API_KEY=your_gemini_api_key
 DATABASE_URL=postgresql://user:password@host:port/dbname
 REDIS_URL=redis://default:password@host:port
+LIFF_ID=your_liff_id
 ```
 
 | Variable | Where to find it |
 |---|---|
-| `CHANNEL_ACCESS_TOKEN` | LINE Developers Console → your channel → Messaging API → Channel access token |
-| `CHANNEL_SECRET` | LINE Developers Console → your channel → Basic settings → Channel secret |
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
-| `DATABASE_URL` | Railway → your project → Variables |
-| `REDIS_URL` | Railway → your project → Variables |
+| `CHANNEL_ACCESS_TOKEN` | LINE Developers → Messaging API channel → Messaging API tab → Channel access token |
+| `CHANNEL_SECRET` | LINE Developers → Messaging API channel → Basic settings → Channel secret |
+| `GEMINI_API_KEY` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `DATABASE_URL` | Railway → your Postgres service → Variables → `DATABASE_URL` |
+| `REDIS_URL` | Railway → your Redis service → Variables → `REDIS_URL` |
+| `LIFF_ID` | See step 6 below |
 
----
-
-## ▶️ Running the App
-
-### Start the server
+### 5. Start the server
 
 ```bash
-python3 -m uvicorn app.main:app --port 3000
+python3.14 -m uvicorn app.main:app --port 3000
 ```
 
-### Expose it publicly with ngrok
+The server auto-creates all DB tables and seeds categories/payment methods on first start.
+
+### 6. Expose with ngrok
 
 ```bash
 ngrok http 3000
 ```
 
-Copy the `https://...ngrok-free.app` URL and set it as the **Webhook URL** in your LINE Developer Console:
+Copy the `https://xxxx.ngrok-free.app` URL — you need it in two places:
+
+**Webhook (Messaging API channel):**
 
 ```
-https://<your-ngrok-subdomain>.ngrok-free.app/webhook
+https://xxxx.ngrok-free.app/webhook
 ```
 
-> Make sure **"Use webhook"** is enabled in the LINE console.
+Go to LINE Developers → Messaging API channel → Messaging API tab → Webhook URL. Enable **Use webhook**.
+
+**LIFF endpoint (LINE Login channel):**
+
+1. Go to LINE Developers → your **LINE Login channel** → LIFF tab
+2. Create a LIFF app (size: `Full`, scope: `profile openid`)
+3. Set Endpoint URL to:
+   ```
+   https://xxxx.ngrok-free.app/liff
+   ```
+4. Copy the generated **LIFF ID** (format: `1234567890-AbCdEfGh`) into your `.env` as `LIFF_ID`
+5. Restart the server
+
+> **Important:** ngrok free tier generates a new URL on every restart. You must update **both** the webhook URL and the LIFF endpoint URL each time.
+
+### 7. Link the LIFF to your bot's rich menu
+
+In the LINE Official Account Manager, set the **マイプロフィール** button to open:
+
+```
+https://liff.line.me/<your_liff_id>
+```
 
 ---
 
-## 🧪 Testing the Receipt Parser
+## 🧪 Testing the Receipt Parser Locally
 
-You can test the Gemini parser locally without LINE:
+Test Gemini parsing without running LINE at all:
 
 ```bash
-# parse only
-python3 -m tests.receipt_scan static/images/Test.JPG
+# Parse only — prints structured JSON
+python3.14 -m tests.receipt_scan static/images/Test.JPG
 
-# parse + save to DB
-python3 -m tests.receipt_scan static/images/Test.JPG --save
+# Parse + save to DB
+python3.14 -m tests.receipt_scan static/images/Test.JPG --save
 ```
-
-This runs the parser directly on a local image and prints the structured JSON + formatted reply to the terminal.
 
 ---
 
@@ -131,76 +159,74 @@ This runs the parser directly on a local image and prints the structured JSON + 
 ```
 LINE-Budget-Tracker/
 ├── app/
-│   ├── __init__.py
-│   ├── config.py                    # Environmental variables
-│   ├── main.py                      # FastAPI entry point, lifespan
+│   ├── config.py                    # Loads env vars
+│   ├── constants.py                 # CATEGORIES and PAYMENT_METHODS (single source of truth)
+│   ├── main.py                      # FastAPI entry point, lifespan hooks
 │   ├── db/
-│   │   ├── __init__.py
-│   │   ├── connection.py            # asyncpg pool management
-│   │   ├── init_db.py               # table creation + seeding
+│   │   ├── connection.py            # asyncpg pool
+│   │   ├── init_db.py               # Table creation + seeding on startup
+│   │   ├── redis.py                 # Redis client (session state)
 │   │   └── migrations/
-│   │       ├── init_tables.sql      # CREATE TABLE statements
-│   │       └── seed.sql             # seed data (categories, payment methods)
-│   ├── repositories/                # DB reads/writes, one file per entity
-│   │   ├── __init__.py
-│   │   ├── user_repo.py
-│   │   ├── transaction_repo.py
-│   │   ├── category_repo.py
-│   │   └── payment_method_repo.py
-│   ├── routers/                     # HTTP layer only
-│   │   ├── __init__.py
-│   │   └── webhook.py               # POST /webhook
-│   └── services/                    # Business logic
-│       ├── __init__.py
-│       ├── line_service.py          # LINE API, event handling
-│       └── receipt_service.py       # Gemini receipt parsing
+│   │       └── init_tables.sql      # CREATE TABLE statements
+│   ├── repositories/
+│   │   ├── user_repo.py             # create/deactivate user
+│   │   └── transaction_repo.py      # save, query, delete transactions
+│   ├── routers/
+│   │   ├── webhook.py               # POST /webhook (LINE events)
+│   │   └── liff.py                  # GET /liff, GET /api/stats, DELETE /api/transaction/:id
+│   ├── services/
+│   │   ├── line_service.py          # Event handling, reply logic, state machine
+│   │   ├── line_state_service.py    # Redis-backed conversation state (15 min TTL)
+│   │   └── receipt_service.py       # Gemini receipt parsing
+│   └── static/
+│       └── liff/
+│           └── index.html           # LIFF miniapp (monthly stats UI)
 ├── static/
-│       └── images/
-│           └── Test.JPG             # Sample receipt for testing
+│   └── images/
+│       └── Test.JPG                 # Sample receipt for local testing
 ├── tests/
-│   └── test_receipt.py              # CLI tool for local parser testing
-├── .env                             # API keys (not committed)
-├── .env.example                     # ENV template
+│   └── receipt_scan.py              # CLI receipt parser test
+├── .env.example                     # ENV template (copy to .env)
 ├── .gitignore
-├── Procfile                         # Heroku/Railway process config
-├── requirements.txt
+├── Procfile                         # Railway/Heroku: uvicorn app.main:app
+├── requirements.txt                 # Pinned dependencies
 └── README.md
 ```
 
 ---
 
-## 🤖 Receipt Reply Format
+## 🗺 LIFF Miniapp
 
-When a receipt image is sent, the bot replies in this format:
+Accessible via the **マイプロフィール** button in the LINE chat menu.
 
-```
-🏪 セブン-イレブン
-📂 コンビニ
-📅 2025-04-28
-💴 ¥1,250
-💳 電子マネー
+- Month navigation (‹ ›) — no future months
+- Total spend for the month
+- Category breakdown with percentage bars
+- Tap a category to expand individual transactions (date, payment method, memo)
+- 🗑 Delete button per transaction
 
-明細:
-  • おにぎり 鮭  ¥160
-  • お茶 500ml  ¥140
-  • チョコレート  ¥320
-  • 洗剤  ¥630
-```
+Authentication: LINE access token verified against `api.line.me/v2/profile` on every API call.
 
-### Supported categories
+---
 
-`食費` · `交通費` · `日用品` · `カフェ` · `外食` · `ショッピング` · `その他`
+## 🤖 Bot Flow
 
-### Supported payment methods
-
-`現金` · `クレジットカード` · `電子マネー` · `QRコード` · `不明`
+| Trigger | Action |
+|---|---|
+| Receipt image | Gemini parses → confirmation card with edit options |
+| Confirm | Transaction saved to DB |
+| Edit | Step-by-step: date → category → payment → amount → note |
+| 手動で入力 | Manual entry flow (same steps) |
+| マイプロフィール | Opens LIFF miniapp |
+| 使い方 | Usage instructions |
+| Follow event | User registered in DB |
+| Unfollow event | User deactivated |
 
 ---
 
 ## ⚠️ Notes
 
-- The webhook signature is verified using HMAC-SHA256 to ensure requests come from LINE.
-- If the receipt cannot be parsed, the bot replies: `レシートの読み取りに失敗しました。`
-- ngrok free tier generates a new URL each restart — update the LINE webhook URL each time.
-
----
+- Webhook signature verified with HMAC-SHA256 — requests not from LINE are rejected with 400.
+- Receipt parse failure replies: `レシートの読み取りに失敗しました。`
+- Conversation state stored in Redis with 15-minute TTL.
+- DB tables and seed data are created automatically on server start — no manual migration needed.
