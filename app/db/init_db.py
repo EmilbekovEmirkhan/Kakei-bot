@@ -1,26 +1,11 @@
-import asyncpg
 from pathlib import Path
 from app.db.connection import get_pool
+from app.constants import CATEGORIES, PAYMENT_METHODS
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
-SEED_CATEGORIES = [
-    ("食費",        "🍱"),
-    ("交通費",      "🚃"),
-    ("日用品",      "🛒"),
-    ("カフェ",      "☕"),
-    ("外食",        "🍜"),
-    ("ショッピング", "🛍️"),
-    ("その他",      "📦"),
-]
-
-SEED_PAYMENT_METHODS = [
-    ("現金",            "💴"),
-    ("クレジットカード",  "💳"),
-    ("電子マネー",       "📱"),
-    ("QRコード",        "📲"),
-    ("不明",            "❓"),
-]
+SEED_CATEGORIES     = [(c["name"], c["icon"]) for c in CATEGORIES]
+SEED_PAYMENT_METHODS = [(p["name"], p["icon"]) for p in PAYMENT_METHODS]
 
 
 async def init_db():

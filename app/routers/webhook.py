@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from app.services.line_service import verify_signature, handle_event
@@ -10,7 +13,8 @@ async def webhook(request: Request):
     if not verify_signature(body, request.headers.get("X-Line-Signature", "")):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    for event in (await request.json()).get("events", []):
-        await handle_event(event)
+    events = json.loads(body).get("events", [])
+    if events:
+        await asyncio.gather(*[handle_event(e) for e in events])
 
     return JSONResponse({"status": "ok"})

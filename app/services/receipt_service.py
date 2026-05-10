@@ -6,41 +6,19 @@ Takes raw image bytes, returns structured dict and formatted reply.
 import json
 from google import genai
 from app.config import GEMINI_API_KEY
+from app.constants import CATEGORIES, PAYMENT_METHODS
 
 
-CATEGORIES = [
-    {"id": 1, "name": "食費", "icon": "🍱"},
-    {"id": 2, "name": "交通費", "icon": "🚃"},
-    {"id": 3, "name": "日用品", "icon": "🛒"},
-    {"id": 4, "name": "カフェ", "icon": "☕"},
-    {"id": 5, "name": "外食", "icon": "🍜"},
-    {"id": 6, "name": "ショッピング", "icon": "🛍️"},
-    {"id": 7, "name": "その他", "icon": "📦"},
-]
-
-PAYMENT_METHODS = [
-    {"id": 1, "name": "現金", "icon": "💴"},
-    {"id": 2, "name": "クレジットカード", "icon": "💳"},
-    {"id": 3, "name": "電子マネー", "icon": "📱"},
-    {"id": 4, "name": "QRコード", "icon": "📲"},
-    {"id": 5, "name": "不明", "icon": "❓"},
-]
-
-
-def build_prompt() -> str:
-    categories_json = json.dumps(CATEGORIES, ensure_ascii=False)
-    payment_methods_json = json.dumps(PAYMENT_METHODS, ensure_ascii=False)
-
-    return f"""
+_PROMPT: str = f"""
 You are a receipt parser specialized in Japanese convenience store and retail receipts.
 
 Analyze this receipt image and extract the transaction information.
 
 You must choose the category_id from this list:
-{categories_json}
+{json.dumps(CATEGORIES, ensure_ascii=False)}
 
 You must choose the payment_method_id from this list:
-{payment_methods_json}
+{json.dumps(PAYMENT_METHODS, ensure_ascii=False)}
 
 Return ONLY valid JSON — no markdown, no code blocks, just raw JSON.
 
@@ -90,7 +68,7 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
         model="gemini-2.5-flash",
         contents=[
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            build_prompt(),
+            _PROMPT,
         ],
     )
 
@@ -113,35 +91,3 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
         data["amount"] = int(data["amount"])
 
     return data
-
-
-def format_receipt_reply(data: dict) -> str:
-    lines = []
-
-    if data.get("store_name"):
-        lines.append(f"🏪 {data['store_name']}")
-
-    if data.get("category_id"):
-        category = next((c for c in CATEGORIES if c["id"] == data["category_id"]), None)
-        if category:
-            lines.append(f"📂 {category['icon']} {category['name']}")
-
-    if data.get("date"):
-        lines.append(f"📅 {data['date']}")
-
-    if data.get("amount") is not None:
-        lines.append(f"💴 ¥{data['amount']:,}")
-
-    if data.get("payment_method_id"):
-        payment = next((p for p in PAYMENT_METHODS if p["id"] == data["payment_method_id"]), None)
-        if payment:
-            lines.append(f"💳 {payment['icon']} {payment['name']}")
-
-    if data.get("items"):
-        lines.append("\n明細:")
-        for item in data["items"]:
-            name = item.get("name", "?")
-            price = item.get("price")
-            lines.append(f"  • {name}  ¥{price:,}" if price is not None else f"  • {name}")
-
-    return "\n".join(lines)

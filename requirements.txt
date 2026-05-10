@@ -1,7 +1,7 @@
-fastapi
-uvicorn
-httpx
-python-dotenv
-google-genai
-asyncpg
-redis
+fastapi==0.136.1
+uvicorn==0.46.0
+httpx==0.28.1
+python-dotenv==1.2.2
+google-genai==1.73.1
+asyncpg==0.31.0
+redis==7.4.0
