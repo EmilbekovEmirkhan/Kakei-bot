@@ -771,7 +771,7 @@ async def ask_payment_method(reply_token: str, state: dict):
             payment_method_id=str(payment["id"]),
         )
 
-        items.append(quick_reply_postback_item(label, data))
+        items.append(quick_reply_postback_item(label, data, input_option="openKeyboard"))
 
     message = {
         "type": "text",
