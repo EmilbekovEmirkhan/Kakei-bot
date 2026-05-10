@@ -739,7 +739,6 @@ async def save_transaction_from_state(reply_token: str, user_id: str, state: dic
         amount_display = f"¥{state['amount']:,}" if state.get("amount") is not None else "不明"
         reply_text = (
             "✅ 登録しました / Transaction saved\n\n"
-            f"ID: {transaction_id}\n"
             f"日付: {state.get('date', '不明')}\n"
             f"カテゴリ: {state.get('category_icon', '')} {state.get('category_name', '不明')}\n"
             f"支払方法: {state.get('payment_method_icon', '')} {state.get('payment_method_name', '不明')}\n"
