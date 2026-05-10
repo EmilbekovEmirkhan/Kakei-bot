@@ -279,7 +279,8 @@ async def start_manual_entry(reply_token: str, user_id: str):
                         "data": make_manual_postback_data("date"),
                         "mode": "date",
                     }
-                }
+                },
+                get_cancel_item(),
             ]
         }
     }
@@ -296,6 +297,11 @@ async def handle_postback(event: dict):
     postback = event.get("postback", {})
     data = parse_postback_data(postback.get("data", ""))
     flow = data.get("flow")
+
+    if flow == "cancel":
+        await delete_manual_entry_state(user_id)
+        await reply_message(reply_token, "キャンセルしました / Cancelled ✅")
+        return
 
     if flow == "manual":
         await handle_manual_postback(reply_token, user_id, data, postback)
@@ -342,14 +348,19 @@ async def handle_manual_postback(reply_token: str, user_id: str, data: dict, pos
             return
         state.update({"step": "amount", "payment_method_id": payment_method_id, "payment_method_name": payment["name"], "payment_method_icon": payment["icon"]})
         await set_manual_entry_state(user_id, state)
-        text = (
-            "金額を入力してください / Please enter the amount\n\n"
-            f"日付: {state['date']}\n"
-            f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
-            f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n\n"
-            "例: 1200"
-        )
-        await reply_message(reply_token, text)
+        await reply_raw_message(reply_token, [{
+                                                "type": "text",
+                                                "text": (
+                                                    "金額を入力してください / Please enter the amount\n\n"
+                                                    f"日付: {state['date']}\n"
+                                                    f"カテゴリ: {state['category_icon']} {state['category_name']}\n"
+                                                    f"支払方法: {state['payment_method_icon']} {state['payment_method_name']}\n\n"
+                                                    "例: 1200"
+                                                ),
+                                                "quickReply": {
+                                                    "items": [get_cancel_item()]  # ← here
+                                                }
+                                            }])
         return
 
     if step == "note_skip":
@@ -514,6 +525,7 @@ async def ask_receipt_review(reply_token: str, state: dict):
             "items": [
                 quick_reply_postback_item("✅ 確認", make_receipt_postback_data("confirm_all")),
                 quick_reply_postback_item("✏️ 編集", make_receipt_postback_data("edit")),
+                get_cancel_item(),
             ]
         },
     }
@@ -536,6 +548,7 @@ async def ask_receipt_date(reply_token: str, state: dict):
             "mode": "date",
         },
     })
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -562,6 +575,7 @@ async def ask_receipt_category(reply_token: str, state: dict):
             f"{category['icon']} {category['name']}",
             make_receipt_postback_data("category_pick", category_id=str(category["id"])),
         ))
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -591,6 +605,7 @@ async def ask_receipt_payment(reply_token: str, state: dict):
             f"{payment['icon']} {payment['name']}",
             make_receipt_postback_data("payment_pick", payment_method_id=str(payment["id"])),
         ))
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -618,6 +633,8 @@ async def ask_receipt_amount(reply_token: str, state: dict):
         make_receipt_postback_data("amount_edit"),
         input_option="openKeyboard",
     ))
+    
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -638,6 +655,7 @@ async def ask_receipt_note_option(reply_token: str):
             "items": [
                 quick_reply_postback_item("スキップ", make_receipt_postback_data("note_skip")),
                 quick_reply_postback_item("メモを追加", make_receipt_postback_data("note_add"), input_option="openKeyboard"),
+                get_cancel_item(),
             ]
         },
     }
@@ -661,12 +679,18 @@ async def ask_receipt_final_confirm(reply_token: str, state: dict):
             "items": [
                 quick_reply_postback_item("✅ 確認", make_receipt_postback_data("final_confirm")),
                 quick_reply_postback_item("🔄 やり直す", make_receipt_postback_data("restart")),
+                get_cancel_item(),
             ]
         },
     }
     await reply_raw_message(reply_token, [message])
 
 async def handle_receipt_text_input(reply_token: str, user_id: str, text: str, state: dict):
+    if text in ("キャンセル", "cancel"):
+        await delete_manual_entry_state(user_id)
+        await reply_message(reply_token, "キャンセルしました / Cancelled ✅")
+        return
+
     step = state.get("step")
 
     if step == "edit_amount_input":
@@ -740,6 +764,7 @@ async def ask_category(reply_token: str, selected_date: str):
         )
 
         items.append(quick_reply_postback_item(label, data))
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -772,6 +797,8 @@ async def ask_payment_method(reply_token: str, state: dict):
         )
 
         items.append(quick_reply_postback_item(label, data, input_option="openKeyboard"))
+    
+    items.append(get_cancel_item())
 
     message = {
         "type": "text",
@@ -810,6 +837,7 @@ async def ask_note_option(reply_token: str):
                     data=make_manual_postback_data("note_add"),
                     input_option="openKeyboard",
                 ),
+                get_cancel_item(),
             ]
         }
     }
@@ -838,6 +866,7 @@ async def ask_confirm(reply_token: str, state: dict):
                     label="🔄 やり直す",
                     data=make_manual_postback_data("restart"),
                 ),
+                get_cancel_item(),
             ]
         },
     }
@@ -849,6 +878,11 @@ async def handle_manual_text_input(
     text: str,
     state: dict,
 ):
+    if text in ("キャンセル", "cancel"):
+        await delete_manual_entry_state(user_id)
+        await reply_message(reply_token, "キャンセルしました / Cancelled ✅")
+        return
+
     step = state.get("step")
 
     if step == "amount":
@@ -886,3 +920,9 @@ async def handle_manual_text_input(
 
     await reply_message(reply_token, "入力状態が正しくありません。「手動で入力」からもう一度始めてください。")
     await delete_manual_entry_state(user_id)
+
+def get_cancel_item() -> dict:
+    return quick_reply_postback_item(
+        "❌ キャンセル",
+        urlencode({"flow": "cancel"}),
+    )
