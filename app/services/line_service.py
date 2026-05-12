@@ -6,7 +6,7 @@ from datetime import datetime
 from urllib.parse import urlencode, parse_qs
 
 import httpx
-from app.services.receipt_service import parse_receipt_bytes
+from app.services.receipt_service import parse_receipt_bytes, optimize_receipt_image
 from app.repositories.user_repo import create_user, deactivate_user
 from app.repositories.transaction_repo import save_transaction
 from app.services.line_state_service import (
@@ -136,7 +136,13 @@ async def handle_unfollow(event: dict):
 async def handle_image_message(reply_token: str, message_id: str, user_id: str):
     try:
         image_bytes = await download_image_from_line(message_id)
-        parsed = parse_receipt_bytes(image_bytes)
+        optimized_bytes, mime_type = optimize_receipt_image(
+            image_bytes,
+            max_width=768,
+            jpeg_quality=75,
+        )
+
+        parsed = parse_receipt_bytes(optimized_bytes, mime_type=mime_type)
     except Exception:
         traceback.print_exc()
         await reply_message(reply_token, "レシートの読み取りに失敗しました。")

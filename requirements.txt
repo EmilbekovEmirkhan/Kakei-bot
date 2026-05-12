@@ -5,3 +5,4 @@ python-dotenv==1.2.2
 google-genai==1.73.1
 asyncpg==0.31.0
 redis==7.4.0
+pillow==12.2.0
