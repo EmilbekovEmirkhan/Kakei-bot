@@ -3,7 +3,12 @@ from collections import defaultdict
 from app.db.connection import get_pool
 
 
-async def get_monthly_stats(uid: str, year: int, month: int) -> dict:
+async def get_monthly_stats(
+    uid: str,
+    year: int,
+    month: int,
+    payment_method_id: int | None = None,
+) -> dict:
     pool = await get_pool()
     async with pool.acquire() as conn:
         category_rows = await conn.fetch("""
@@ -17,9 +22,10 @@ async def get_monthly_stats(uid: str, year: int, month: int) -> dict:
             WHERE t.uid = $1
               AND EXTRACT(YEAR  FROM t.transacted_at) = $2
               AND EXTRACT(MONTH FROM t.transacted_at) = $3
+              AND ($4::int IS NULL OR t.payment_method_id = $4)
             GROUP BY c.id, c.name, c.icon
             ORDER BY subtotal DESC
-        """, uid, year, month)
+        """, uid, year, month, payment_method_id)
 
         txn_rows = await conn.fetch("""
             SELECT
@@ -32,18 +38,18 @@ async def get_monthly_stats(uid: str, year: int, month: int) -> dict:
                 p.name  AS payment_name,
                 p.icon  AS payment_icon
             FROM transactions t
-            LEFT JOIN categories     c ON c.id = t.category_id
+            LEFT JOIN categories      c ON c.id = t.category_id
             LEFT JOIN payment_methods p ON p.id = t.payment_method_id
             WHERE t.uid = $1
               AND EXTRACT(YEAR  FROM t.transacted_at) = $2
               AND EXTRACT(MONTH FROM t.transacted_at) = $3
+              AND ($4::int IS NULL OR t.payment_method_id = $4)
             ORDER BY t.transacted_at DESC
-        """, uid, year, month)
+        """, uid, year, month, payment_method_id)
 
         total = sum(int(r["subtotal"]) for r in category_rows)
         count = sum(int(r["count"]) for r in category_rows)
 
-        # group transactions by category name
         txns_by_cat: dict[str, list] = defaultdict(list)
         for t in txn_rows:
             cat = t["category_name"] or "その他"
@@ -69,6 +75,7 @@ async def get_monthly_stats(uid: str, year: int, month: int) -> dict:
                     "transactions": txns_by_cat[row["category_name"] or "その他"],
                 }
                 for row in category_rows
+                if int(row["subtotal"]) > 0
             ],
         }
 

@@ -65,81 +65,8 @@ async def get_line_profile(user_id: str) -> dict:
     resp = await _http_client.get(
         url, headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
     )
-<<<<<<< HEAD
-
-
-async def handle_unfollow(event: dict):
-    user_id = event.get("source", {}).get("userId")
-    if not user_id:
-        return
-    await deactivate_user(user_id)
-
-async def handle_image_message(reply_token: str, message_id: str, user_id: str):
-    try:
-        image_bytes = await download_image_from_line(message_id)
-        optimized_bytes, mime_type = optimize_receipt_image(
-            image_bytes,
-            max_width=768,
-            jpeg_quality=75,
-        )
-
-        parsed = parse_receipt_bytes(optimized_bytes, mime_type=mime_type)
-    except Exception:
-        traceback.print_exc()
-        await reply_message(reply_token, "レシートの読み取りに失敗しました。")
-        return
-
-    scanned_date = parsed.get("date")
-    scanned_amount = parsed.get("amount")
-    scanned_category_id = parsed.get("category_id")
-    scanned_payment_id = parsed.get("payment_method_id")
-
-    store_name = parsed.get("store_name", "不明")
-
-    category = find_category(scanned_category_id) if scanned_category_id else None
-    payment = find_payment_method(scanned_payment_id) if scanned_payment_id else None
-
-    state = {
-        "flow": "receipt",
-        "step": "review",
-        "store_name": store_name,
-        "date": scanned_date,
-        "amount": scanned_amount,
-        "category_id": category["id"] if category else None,
-        "category_name": category["name"] if category else None,
-        "category_icon": category["icon"] if category else None,
-        "payment_method_id": payment["id"] if payment else None,
-        "payment_method_name": payment["name"] if payment else None,
-        "payment_method_icon": payment["icon"] if payment else None,
-        "note": None,
-    }
-
-    await set_manual_entry_state(user_id, state)
-    await ask_receipt_review(reply_token, state)
-    
-async def handle_how_to_use(reply_token: str):
-    text = (
-        "📖 使い方 / How to use\n\n"
-        "1️⃣ レシートの写真を送ってください\n"
-        "   → ボットが自動で読み取ります\n\n"
-        "2️⃣ 内容を確認してください\n"
-        "   店名・カテゴリ・金額・支払方法\n\n"
-        "3️⃣ 統計はメニューの「マイプロフィール」から確認できます\n"
-        "   → 今月の支出をカテゴリ別に表示します\n\n"
-        "ご不明な点はお気軽にどうぞ！"
-    )
-    await reply_message(reply_token, text)
-
-
-async def download_image_from_line(message_id: str) -> bytes:
-    url = LINE_CONTENT_URL.format(message_id=message_id)
-    response = await _http_client.get(url, headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}, timeout=10.0)
-    response.raise_for_status()
-    return response.content
-=======
     resp.raise_for_status()
     return resp.json()
->>>>>>> 0081153 (feat: bilingual support, back buttons, LIFF localisation, UX polish)
 
 
 async def reply_message(reply_token: str, text: str):
@@ -338,8 +265,9 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str):
     await reply_message(reply_token, t("processing", lang))
 
     try:
-        image_bytes = await download_image_from_line(message_id)
-        parsed      = parse_receipt_bytes(image_bytes)
+        image_bytes                  = await download_image_from_line(message_id)
+        optimized_bytes, mime_type   = optimize_receipt_image(image_bytes, max_width=768, jpeg_quality=75)
+        parsed                       = parse_receipt_bytes(optimized_bytes, mime_type=mime_type)
     except Exception:
         traceback.print_exc()
         await push_message(user_id, t("parse_failed", lang))
