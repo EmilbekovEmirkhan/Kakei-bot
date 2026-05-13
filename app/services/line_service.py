@@ -432,6 +432,7 @@ async def ask_payment_method(reply_token: str, state: dict, lang: str):
         quick_reply_postback_item(
             f"{p['icon']} {_pay_name(p, lang)}",
             make_manual_postback_data("payment", payment_method_id=str(p["id"])),
+            input_option="openKeyboard",
         )
         for p in PAYMENT_METHODS
     ]
