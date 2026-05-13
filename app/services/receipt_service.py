@@ -4,51 +4,39 @@ Takes raw image bytes, returns structured dict and formatted reply.
 """
 
 import json
+
+from io import BytesIO
+from PIL import Image, ImageOps
 from google import genai
 from app.config import GEMINI_API_KEY
-from app.constants import CATEGORIES, PAYMENT_METHODS
 
 
-_PROMPT: str = f"""
-You are a receipt parser specialized in Japanese convenience store and retail receipts.
+_PROMPT: str = """
+Parse this Japanese receipt.
 
-Analyze this receipt image and extract the transaction information.
+Return ONLY valid JSON:
+{
+  "c": category id or null,
+  "a": final paid total integer yen or null,
+  "d": "YYYY-MM-DD" or null,
+  "p": payment method id or null
+}
 
-You must choose the category_id from this list:
-{json.dumps(CATEGORIES, ensure_ascii=False)}
+Categories:
+1 食費, 2 交通費, 3 日用品, 4 カフェ, 5 外食, 6 ショッピング, 7 その他
 
-You must choose the payment_method_id from this list:
-{json.dumps(PAYMENT_METHODS, ensure_ascii=False)}
-
-Return ONLY valid JSON — no markdown, no code blocks, just raw JSON.
-
-Schema:
-{{
-  "store_name": "store name as printed on receipt",
-  "category_id": integer or null,
-  "amount": final total paid as integer in yen including tax,
-  "date": "YYYY-MM-DD" or null if not found,
-  "payment_method_id": integer or null,
-  "items": [
-    {{
-      "name": "item name",
-      "price": integer or null
-    }}
-  ]
-}}
+Payment:
+1 現金, 2 クレジットカード, 3 電子マネー, 4 QRコード, 5 不明
 
 Rules:
-- category_id must be one of the provided category IDs.
-- payment_method_id must be one of the provided payment method IDs.
-- If the payment method is Suica, PASMO, IC, nanaco, WAON, iD, QUICPay, Rakuten Edy, or similar, use 電子マネー.
-- If the payment method is PayPay, Rakuten Pay, d払い, au PAY, LINE Pay, Merpay, or similar, use QRコード.
-- If the receipt says cash, 現金, お預り, or change/お釣り, use 現金.
-- If the receipt says credit, Visa, Mastercard, JCB, AMEX, or card, use クレジットカード.
-- If unsure about payment method, use 不明.
-- If unsure about category, use その他.
-- amount must be the final paid total, not subtotal.
+Use final paid total, not subtotal.
+If category unsure, use 7.
+If payment unsure, use 5.
+IC/Suica/PASMO/nanaco/WAON/iD/QUICPay/Edy = 3.
+PayPay/Rakuten Pay/d払い/au PAY/LINE Pay/Merpay = 4.
+Visa/Mastercard/JCB/AMEX/card/クレジット = 2.
+現金/お預り/お釣り = 1.
 """
-
 
 _client: genai.Client | None = None
 
@@ -70,6 +58,10 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
             genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             _PROMPT,
         ],
+        config={
+            "temperature": 0,
+            "response_mime_type": "application/json",
+        },
     )
 
     raw = response.text.strip()
@@ -80,14 +72,46 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
 
     data = json.loads(raw)
 
-    # Defensive normalization
-    if data.get("category_id") is not None:
-        data["category_id"] = int(data["category_id"])
+    normalized = {
+        "category_id": data.get("c"),
+        "amount": data.get("a"),
+        "date": data.get("d"),
+        "payment_method_id": data.get("p"),
+    }
 
-    if data.get("payment_method_id") is not None:
-        data["payment_method_id"] = int(data["payment_method_id"])
+    if normalized.get("category_id") is not None:
+        normalized["category_id"] = int(normalized["category_id"])
 
-    if data.get("amount") is not None:
-        data["amount"] = int(data["amount"])
+    if normalized.get("payment_method_id") is not None:
+        normalized["payment_method_id"] = int(normalized["payment_method_id"])
 
-    return data
+    if normalized.get("amount") is not None:
+        normalized["amount"] = int(normalized["amount"])
+
+    return normalized
+
+def optimize_receipt_image(
+    image_bytes: bytes,
+    max_width: int = 640,
+    jpeg_quality: int = 70,
+) -> tuple[bytes, str]:
+    image = Image.open(BytesIO(image_bytes))
+
+    image = ImageOps.exif_transpose(image)
+
+    image = image.convert("RGB")
+
+    if image.width > max_width:
+        ratio = max_width / image.width
+        new_height = int(image.height * ratio)
+        image = image.resize((max_width, new_height))
+
+    output = BytesIO()
+    image.save(
+        output,
+        format="JPEG",
+        quality=jpeg_quality,
+        optimize=True,
+    )
+
+    return output.getvalue(), "image/jpeg"
