@@ -5,7 +5,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import LIFF_ID
+from app.constants import CATEGORIES, PAYMENT_METHODS
 from app.repositories.transaction_repo import get_monthly_stats, delete_transaction
+from app.repositories.user_repo import get_user_language
 from app.services.line_service import get_http_client
 
 router = APIRouter()
@@ -16,6 +18,23 @@ _LIFF_HTML_CONTENT = (
     .read_text(encoding="utf-8")
     .replace("{{LIFF_ID}}", LIFF_ID)
 )
+
+# Pre-built translation maps (built once at startup)
+_CAT_JA_TO_EN  = {c["name"]: c.get("name_en", c["name"]) for c in CATEGORIES}
+_PAY_LABEL_MAP = {
+    f"{p['icon']} {p['name']}": f"{p['icon']} {p['name_en']}"
+    for p in PAYMENT_METHODS
+}
+
+
+def _localise_stats(stats: dict, lang: str) -> None:
+    """Translate category names and payment labels in-place when lang == 'en'."""
+    if lang != "en":
+        return
+    for cat in stats.get("by_category", []):
+        cat["name"] = _CAT_JA_TO_EN.get(cat["name"], cat["name"])
+        for txn in cat.get("transactions", []):
+            txn["payment"] = _PAY_LABEL_MAP.get(txn["payment"], txn["payment"])
 
 
 async def _verify_line_token(access_token: str) -> str:
@@ -40,12 +59,16 @@ async def api_stats(request: Request):
 
     now = datetime.now()
     try:
-        year  = int(request.query_params.get("year",  now.year))
-        month = int(request.query_params.get("month", now.month))
+        year              = int(request.query_params.get("year",  now.year))
+        month             = int(request.query_params.get("month", now.month))
+        payment_method_id = int(p) if (p := request.query_params.get("payment_method_id")) else None
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid year/month")
+        raise HTTPException(status_code=400, detail="Invalid query params")
 
-    stats = await get_monthly_stats(uid, year, month)
+    lang  = await get_user_language(uid)
+    stats = await get_monthly_stats(uid, year, month, payment_method_id)
+    stats["lang"] = lang
+    _localise_stats(stats, lang)
     return JSONResponse(stats)
 
 

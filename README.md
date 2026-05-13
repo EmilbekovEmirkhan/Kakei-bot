@@ -1,16 +1,17 @@
 # 🧾 Kakei (家計) — LINE Budget Tracker
 
-A LINE chatbot that scans Japanese receipt images with **Gemini 2.5 Flash**, saves transactions to PostgreSQL, and shows monthly spending breakdowns inside LINE via a LIFF miniapp.
+A bilingual (🇯🇵 / 🇬🇧) LINE chatbot that scans receipt images with **Gemini 2.5 Flash**, saves transactions to PostgreSQL, and shows monthly spending breakdowns inside LINE via a LIFF miniapp.
 
 ---
 
 ## ✨ How It Works
 
-1. User sends a receipt photo in LINE
-2. Bot downloads the image via LINE Content API
-3. **Gemini 2.5 Flash** parses the receipt → structured JSON (store, amount, category, date, payment method)
-4. Bot asks the user to confirm or edit before saving
-5. User opens **マイプロフィール** (My Profile) in the LINE menu → LIFF miniapp shows monthly stats by category, with per-transaction accordion and delete
+1. User follows the bot → bilingual welcome + language picker (Japanese / English)
+2. User sends a receipt photo in LINE
+3. Bot replies instantly with a "processing" message (Push API delivers the result)
+4. **Gemini 2.5 Flash** parses the receipt → structured JSON (store, amount, category, date, payment method)
+5. Bot sends a confirmation card — user confirms or edits each field (with Back buttons at every step)
+6. User opens **マイプロフィール / My Profile** in the LINE menu → LIFF miniapp shows monthly stats by category
 
 ---
 
@@ -21,7 +22,7 @@ A LINE chatbot that scans Japanese receipt images with **Gemini 2.5 Flash**, sav
 | Runtime | Python 3.14 |
 | Web framework | FastAPI + Uvicorn |
 | Database | PostgreSQL (Railway) |
-| Session state | Redis (Railway) |
+| Session state | Redis (Railway, 15-min TTL) |
 | LINE integration | LINE Messaging API + LINE Login (LIFF) |
 | AI / OCR | Google Gemini 2.5 Flash |
 | HTTP client | httpx (async) |
@@ -128,11 +129,11 @@ Go to LINE Developers → Messaging API channel → Messaging API tab → Webhoo
 4. Copy the generated **LIFF ID** (format: `1234567890-AbCdEfGh`) into your `.env` as `LIFF_ID`
 5. Restart the server
 
-> **Important:** ngrok free tier generates a new URL on every restart. You must update **both** the webhook URL and the LIFF endpoint URL each time.
+> **Important:** ngrok free tier generates a new URL on every restart. Update **both** the webhook URL and the LIFF endpoint URL each time.
 
 ### 7. Link the LIFF to your bot's rich menu
 
-In the LINE Official Account Manager, set the **マイプロフィール** button to open:
+In the LINE Official Account Manager, set the **マイプロフィール / My Profile** button to open:
 
 ```
 https://liff.line.me/<your_liff_id>
@@ -160,7 +161,8 @@ python3.14 -m tests.receipt_scan static/images/Test.JPG --save
 LINE-Budget-Tracker/
 ├── app/
 │   ├── config.py                    # Loads env vars
-│   ├── constants.py                 # CATEGORIES and PAYMENT_METHODS (single source of truth)
+│   ├── constants.py                 # CATEGORIES and PAYMENT_METHODS (single source of truth, ja + en names)
+│   ├── i18n.py                      # All user-facing strings in Japanese and English
 │   ├── main.py                      # FastAPI entry point, lifespan hooks
 │   ├── db/
 │   │   ├── connection.py            # asyncpg pool
@@ -169,7 +171,7 @@ LINE-Budget-Tracker/
 │   │   └── migrations/
 │   │       └── init_tables.sql      # CREATE TABLE statements
 │   ├── repositories/
-│   │   ├── user_repo.py             # create/deactivate user
+│   │   ├── user_repo.py             # create/deactivate user, get/set language preference
 │   │   └── transaction_repo.py      # save, query, delete transactions
 │   ├── routers/
 │   │   ├── webhook.py               # POST /webhook (LINE events)
@@ -180,7 +182,7 @@ LINE-Budget-Tracker/
 │   │   └── receipt_service.py       # Gemini receipt parsing
 │   └── static/
 │       └── liff/
-│           └── index.html           # LIFF miniapp (monthly stats UI)
+│           └── index.html           # LIFF miniapp (monthly stats UI, bilingual)
 ├── static/
 │   └── images/
 │       └── Test.JPG                 # Sample receipt for local testing
@@ -197,11 +199,14 @@ LINE-Budget-Tracker/
 
 ## 🗺 LIFF Miniapp
 
-Accessible via the **マイプロフィール** button in the LINE chat menu.
+Accessible via the **マイプロフィール / My Profile** button in the LINE chat menu.
 
-- Month navigation (‹ ›) — no future months
+- Displays in the user's chosen language (Japanese or English)
+- Month navigation (‹ ›) — no future months allowed
 - Total spend for the month
 - Category breakdown with percentage bars
+- Filter by payment method (chips: All / Cash / Card / e-Money / QR / Unknown)
+- Sort by date or amount (asc / desc)
 - Tap a category to expand individual transactions (date, payment method, memo)
 - 🗑 Delete button per transaction
 
@@ -209,24 +214,28 @@ Authentication: LINE access token verified against `api.line.me/v2/profile` on e
 
 ---
 
-## 🤖 Bot Flow
+## 🤖 Bot Commands & Flow
 
 | Trigger | Action |
 |---|---|
-| Receipt image | Gemini parses → confirmation card with edit options |
+| Follow event | Bilingual welcome + language picker (Japanese / English) |
+| Language selected | Confirmation + usage guide sent |
+| `言語変更` / `change language` (any case) | Language picker shown again |
+| `使い方` / `help` (any case) | Usage instructions in user's language |
+| `手動で入力` / `manual entry` / `manual` (any case) | Manual entry flow |
+| Receipt image | Instant "processing" reply → Gemini parses → confirmation card |
 | Confirm | Transaction saved to DB |
-| Edit | Step-by-step: date → category → payment → amount → note |
-| 手動で入力 | Manual entry flow (same steps) |
-| マイプロフィール | Opens LIFF miniapp |
-| 使い方 | Usage instructions |
-| Follow event | User registered in DB |
-| Unfollow event | User deactivated |
+| Edit | Step-by-step: date → category → payment → amount → note (← Back at every step) |
+| Confirm All (receipt) | Transaction saved directly from review card |
+| Unfollow event | User deactivated in DB |
 
 ---
 
 ## ⚠️ Notes
 
 - Webhook signature verified with HMAC-SHA256 — requests not from LINE are rejected with 400.
-- Receipt parse failure replies: `レシートの読み取りに失敗しました。`
+- Receipt image flow uses **two API calls**: reply token for instant "processing" acknowledgement, then Push API to deliver the parsed result.
 - Conversation state stored in Redis with 15-minute TTL.
+- Language preference (`ja` / `en`) stored in the `users` table and preserved across blocks/re-follows.
 - DB tables and seed data are created automatically on server start — no manual migration needed.
+- All category and payment method names are defined once in `constants.py` and translated at runtime — no duplication.
