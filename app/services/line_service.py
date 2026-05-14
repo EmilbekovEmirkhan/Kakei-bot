@@ -407,10 +407,8 @@ async def ask_language(reply_token: str, welcome: bool = False):
             "text": (
                 "👋 こんにちは！ Welcome!\n\n"
                 "家計 (Kakei) へようこそ！🏠\n"
-                "レシートを写真で撮るだけで、自動で家計簿に記録できる\n"
-                "LINEボットです 🧾✨\n\n"
-                "Kakei is your personal LINE budget tracker —\n"
-                "just snap a receipt and we log it automatically! ✨"
+                "レシートを写真で撮るだけで、自動で家計簿に記録できるLINEボットです 🧾✨\n\n"
+                "Kakei is your personal LINE budget tracker - just snap a receipt and we log it automatically! ✨"
             ),
         })
     messages.append({
