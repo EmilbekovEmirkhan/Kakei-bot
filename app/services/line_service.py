@@ -201,10 +201,12 @@ async def handle_follow(event: dict):
     try:
         profile = await get_line_profile(user_id)
         name    = profile.get("displayName", "")
+        lang    = profile.get("language", "")
     except Exception:
         traceback.print_exc()
         name = ""
-    await create_user(uid=user_id, name=name)
+        lang = "jp"
+    await create_user(uid=user_id, name=name, language_code=lang)
     if reply_token:
         await ask_language(reply_token, welcome=True)
 
@@ -223,16 +225,16 @@ async def handle_message(event: dict):
     user_id     = event.get("source", {}).get("userId")
     if not reply_token or not user_id:
         return
+    lang = await get_user_language(user_id)
     if message.get("type") == "image":
-        await handle_image_message(reply_token, message["id"], user_id)
+        await handle_image_message(reply_token, message["id"], user_id, lang)
     elif message.get("type") == "text":
-        await handle_text_message(reply_token, user_id, message)
+        await handle_text_message(reply_token, user_id, message, lang)
 
 
-async def handle_text_message(reply_token: str, user_id: str, message: dict):
+async def handle_text_message(reply_token: str, user_id: str, message: dict, lang: str):
     text  = message.get("text", "").strip()
     lower = text.lower()
-    lang  = await get_user_language(user_id)
 
     if text == "言語変更" or lower == "change language":
         await ask_language(reply_token)
@@ -248,18 +250,16 @@ async def handle_text_message(reply_token: str, user_id: str, message: dict):
 
     state = await get_manual_entry_state(user_id)
     if state:
-        state_lang = state.get("lang", lang)
         if state.get("flow") == "receipt":
-            await handle_receipt_text_input(reply_token, user_id, text, state, state_lang)
+            await handle_receipt_text_input(reply_token, user_id, text, state, lang)
         else:
-            await handle_manual_text_input(reply_token, user_id, text, state, state_lang)
+            await handle_manual_text_input(reply_token, user_id, text, state, lang)
         return
 
     await reply_message(reply_token, t("unknown_message", lang))
 
 
-async def handle_image_message(reply_token: str, message_id: str, user_id: str):
-    lang = await get_user_language(user_id)
+async def handle_image_message(reply_token: str, message_id: str, user_id: str, lang: str):
 
     # Acknowledge immediately with the reply token (one-time use)
     await reply_message(reply_token, t("processing", lang))
@@ -357,13 +357,13 @@ async def handle_postback(event: dict):
     if flow == "manual":
         state = await get_manual_entry_state(user_id)
         lang  = state.get("lang") if state else await get_user_language(user_id)
-        await handle_manual_postback(reply_token, user_id, data, postback, lang)
+        await handle_manual_postback(reply_token, user_id, data, postback, state, lang)
         return
 
     if flow == "receipt":
         state = await get_manual_entry_state(user_id)
         lang  = state.get("lang") if state else await get_user_language(user_id)
-        await handle_receipt_postback(reply_token, user_id, data, postback, lang)
+        await handle_receipt_postback(reply_token, user_id, data, postback, state, lang)
         return
 
 
@@ -517,14 +517,13 @@ async def ask_confirm(reply_token: str, state: dict, lang: str):
 
 
 async def handle_manual_postback(
-    reply_token: str, user_id: str, data: dict, postback: dict, lang: str
+    reply_token: str, user_id: str, data: dict, postback: dict, state: dict, lang: str
 ):
     step = data.get("step")
 
     # ── Back navigation ───────────────────────────────────────────────────
 
     if step == "back_date":
-        state = await get_manual_entry_state(user_id)
         if state:
             state["step"] = "date"
             await set_manual_entry_state(user_id, state)
@@ -532,7 +531,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_category":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -542,7 +540,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_payment":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -552,7 +549,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_amount":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -562,7 +558,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_note":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -578,14 +573,12 @@ async def handle_manual_postback(
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
             return
-        state = await get_manual_entry_state(user_id) or {}
         state.update({"flow": "manual", "step": "category", "date": selected_date, "lang": lang})
         await set_manual_entry_state(user_id, state)
         await ask_category(reply_token, selected_date, lang)
         return
 
     if step == "category":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -605,7 +598,6 @@ async def handle_manual_postback(
         return
 
     if step == "payment":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -625,7 +617,6 @@ async def handle_manual_postback(
         return
 
     if step == "note_skip":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -635,7 +626,6 @@ async def handle_manual_postback(
         return
 
     if step == "note_add":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -645,7 +635,6 @@ async def handle_manual_postback(
         return
 
     if step == "confirm":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -883,10 +872,9 @@ async def ask_receipt_final_confirm(reply_token: str, state: dict, lang: str):
 
 
 async def handle_receipt_postback(
-    reply_token: str, user_id: str, data: dict, postback: dict, lang: str
+    reply_token: str, user_id: str, data: dict, postback: dict, state: dict, lang: str
 ):
     step  = data.get("step")
-    state = await get_manual_entry_state(user_id)
 
     if not state or state.get("flow") != "receipt":
         await reply_message(reply_token, t("session_expired_receipt", lang))
