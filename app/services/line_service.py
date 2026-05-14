@@ -23,10 +23,31 @@ from app.services.line_state_service import (
     set_manual_entry_state,
 )
 from app.services.receipt_service import parse_receipt_image_async
-
+from app.services.rate_limit_service import (
+    is_rate_limited,
+    is_temporarily_blocked,
+    temporarily_block_user,
+    should_send_warning,
+    acquire_user_lock,
+    release_user_lock,
+)
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
 LINE_PUSH_URL    = "https://api.line.me/v2/bot/message/push"
 LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content"
+
+TEXT_LIMIT = 30
+TEXT_WINDOW_SECONDS = 60
+TEXT_BLOCK_SECONDS = 60
+
+IMAGE_LIMIT = 3
+IMAGE_WINDOW_SECONDS = 60
+IMAGE_BLOCK_SECONDS = 60
+
+POSTBACK_LIMIT = 30
+POSTBACK_WINDOW_SECONDS = 60
+POSTBACK_BLOCK_SECONDS = 60
+
+RECEIPT_PROCESSING_LOCK_SECONDS = 120
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -223,14 +244,76 @@ async def handle_message(event: dict):
     message     = event.get("message", {})
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
+
     if not reply_token or not user_id:
         return
-    lang = await get_user_language(user_id)
-    if message.get("type") == "image":
-        await handle_image_message(reply_token, message["id"], user_id, lang)
-    elif message.get("type") == "text":
-        await handle_text_message(reply_token, user_id, message, lang)
 
+    message_type = message.get("type")
+    lang = await get_user_language(user_id)
+
+    if message_type == "image":
+        scope = "image"
+
+        if await is_temporarily_blocked(user_id, scope):
+            return
+
+        limited = await is_rate_limited(
+            uid=user_id,
+            scope=scope,
+            limit=IMAGE_LIMIT,
+            window_seconds=IMAGE_WINDOW_SECONDS,
+        )
+
+        if limited:
+            await temporarily_block_user(
+                uid=user_id,
+                scope=scope,
+                ttl_seconds=IMAGE_BLOCK_SECONDS,
+            )
+
+            if await should_send_warning(
+                uid=user_id,
+                scope=scope,
+                cooldown_seconds=IMAGE_BLOCK_SECONDS,
+            ):
+                await reply_message(reply_token, t("rate_limited_image", lang))
+
+            return
+
+        await handle_image_message(reply_token, message["id"], user_id, lang)
+        return
+
+    if message_type == "text":
+        scope = "text"
+
+        if await is_temporarily_blocked(user_id, scope):
+            return
+
+        limited = await is_rate_limited(
+            uid=user_id,
+            scope=scope,
+            limit=TEXT_LIMIT,
+            window_seconds=TEXT_WINDOW_SECONDS,
+        )
+
+        if limited:
+            await temporarily_block_user(
+                uid=user_id,
+                scope=scope,
+                ttl_seconds=TEXT_BLOCK_SECONDS,
+            )
+
+            if await should_send_warning(
+                uid=user_id,
+                scope=scope,
+                cooldown_seconds=TEXT_BLOCK_SECONDS,
+            ):
+                await reply_message(reply_token, t("rate_limited_text", lang))
+
+            return
+
+        await handle_text_message(reply_token, user_id, message, lang)
+        return
 
 async def handle_text_message(reply_token: str, user_id: str, message: dict, lang: str):
     text  = message.get("text", "").strip()
@@ -260,8 +343,22 @@ async def handle_text_message(reply_token: str, user_id: str, message: dict, lan
 
 
 async def handle_image_message(reply_token: str, message_id: str, user_id: str, lang: str):
+    lock_acquired = await acquire_user_lock(
+        uid=user_id,
+        lock_name="receipt_processing",
+        ttl_seconds=RECEIPT_PROCESSING_LOCK_SECONDS,
+    )
 
-    # Acknowledge immediately with the reply token (one-time use)
+    if not lock_acquired:
+        if await should_send_warning(
+            uid=user_id,
+            scope="receipt_processing",
+            cooldown_seconds=60,
+        ):
+            await reply_message(reply_token, t("receipt_already_processing", lang))
+
+        return
+
     await reply_message(reply_token, t("processing", lang))
 
     try:
@@ -272,6 +369,9 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str, 
         traceback.print_exc()
         await push_message(user_id, t("parse_failed", lang))
         return
+
+    finally:
+        await release_user_lock(user_id, "receipt_processing")
 
     scanned_cat_id     = parsed.get("category_id")
     scanned_payment_id = parsed.get("payment_method_id")
@@ -338,6 +438,35 @@ async def handle_postback(event: dict):
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
     if not reply_token or not user_id:
+        return
+    
+    scope = "postback"
+
+    if await is_temporarily_blocked(user_id, scope):
+        return
+
+    limited = await is_rate_limited(
+        uid=user_id,
+        scope=scope,
+        limit=POSTBACK_LIMIT,
+        window_seconds=POSTBACK_WINDOW_SECONDS,
+    )
+
+    if limited:
+        await temporarily_block_user(
+            uid=user_id,
+            scope=scope,
+            ttl_seconds=POSTBACK_BLOCK_SECONDS,
+        )
+
+        if await should_send_warning(
+            uid=user_id,
+            scope=scope,
+            cooldown_seconds=POSTBACK_BLOCK_SECONDS,
+        ):
+            lang = await get_user_language(user_id)
+            await reply_message(reply_token, t("rate_limited_text", lang))
+
         return
 
     postback = event.get("postback", {})
