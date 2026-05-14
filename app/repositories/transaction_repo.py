@@ -1,7 +1,25 @@
 from collections import defaultdict
+from datetime import datetime
 
 from app.db.connection import get_pool
+from app.services.transaction_cache_service import (
+    get_cached_monthly_stats,
+    set_cached_monthly_stats,
+    invalidate_monthly_stats_cache,
+)
 
+def get_month_range(year: int, month: int) -> tuple[datetime, datetime]:
+    if month < 1 or month > 12:
+        raise ValueError("month must be between 1 and 12")
+
+    start_date = datetime(year, month, 1)
+
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1)
+    else:
+        end_date = datetime(year, month + 1, 1)
+
+    return start_date, end_date
 
 async def get_monthly_stats(
     uid: str,
@@ -9,6 +27,17 @@ async def get_monthly_stats(
     month: int,
     payment_method_id: int | None = None,
 ) -> dict:
+    cached = await get_cached_monthly_stats(
+        uid=uid,
+        year=year,
+        month=month,
+        payment_method_id=payment_method_id,
+    )
+
+    if cached is not None:
+        return cached
+
+    start_date, end_date = get_month_range(year, month)
     pool = await get_pool()
     async with pool.acquire() as conn:
         category_rows = await conn.fetch("""
@@ -20,12 +49,12 @@ async def get_monthly_stats(
             FROM transactions t
             LEFT JOIN categories c ON c.id = t.category_id
             WHERE t.uid = $1
-              AND EXTRACT(YEAR  FROM t.transacted_at) = $2
-              AND EXTRACT(MONTH FROM t.transacted_at) = $3
+              AND t.transacted_at >= $2
+              AND t.transacted_at < $3
               AND ($4::int IS NULL OR t.payment_method_id = $4)
             GROUP BY c.id, c.name, c.icon
             ORDER BY subtotal DESC
-        """, uid, year, month, payment_method_id)
+        """, uid, start_date, end_date, payment_method_id)
 
         txn_rows = await conn.fetch("""
             SELECT
@@ -41,54 +70,82 @@ async def get_monthly_stats(
             LEFT JOIN categories      c ON c.id = t.category_id
             LEFT JOIN payment_methods p ON p.id = t.payment_method_id
             WHERE t.uid = $1
-              AND EXTRACT(YEAR  FROM t.transacted_at) = $2
-              AND EXTRACT(MONTH FROM t.transacted_at) = $3
+              AND t.transacted_at >= $2
+              AND t.transacted_at < $3
               AND ($4::int IS NULL OR t.payment_method_id = $4)
             ORDER BY t.transacted_at DESC
-        """, uid, year, month, payment_method_id)
+        """, uid, start_date, end_date, payment_method_id)
 
-        total = sum(int(r["subtotal"]) for r in category_rows)
-        count = sum(int(r["count"]) for r in category_rows)
+    total = sum(int(r["subtotal"]) for r in category_rows)
+    count = sum(int(r["count"]) for r in category_rows)
 
-        txns_by_cat: dict[str, list] = defaultdict(list)
-        for t in txn_rows:
-            cat = t["category_name"] or "その他"
-            txns_by_cat[cat].append({
-                "id":      t["id"],
-                "amount":  int(t["amount"]),
-                "note":    t["note"] or "",
-                "date":    t["transacted_at"].strftime("%Y-%m-%d"),
-                "payment": (t["payment_icon"] or "") + " " + (t["payment_name"] or ""),
-            })
+    txns_by_cat: dict[str, list] = defaultdict(list)
 
-        return {
-            "year":  year,
-            "month": month,
-            "total": total,
-            "count": count,
-            "by_category": [
-                {
-                    "name":         row["category_name"] or "その他",
-                    "icon":         row["category_icon"] or "📦",
-                    "subtotal":     int(row["subtotal"]),
-                    "count":        int(row["count"]),
-                    "transactions": txns_by_cat[row["category_name"] or "その他"],
-                }
-                for row in category_rows
-                if int(row["subtotal"]) > 0
-            ],
-        }
+    for t in txn_rows:
+        cat = t["category_name"] or "その他"
 
+        txns_by_cat[cat].append({
+            "id": t["id"],
+            "amount": int(t["amount"]),
+            "note": t["note"] or "",
+            "date": t["transacted_at"].strftime("%Y-%m-%d"),
+            "payment": (t["payment_icon"] or "") + " " + (t["payment_name"] or ""),
+        })
+
+    stats = {
+        "year": year,
+        "month": month,
+        "total": total,
+        "count": count,
+        "by_category": [
+            {
+                "name": row["category_name"] or "その他",
+                "icon": row["category_icon"] or "📦",
+                "subtotal": int(row["subtotal"]),
+                "count": int(row["count"]),
+                "transactions": txns_by_cat[row["category_name"] or "その他"],
+            }
+            for row in category_rows
+            if int(row["subtotal"]) > 0
+        ],
+    }
+
+    await set_cached_monthly_stats(
+        uid=uid,
+        year=year,
+        month=month,
+        payment_method_id=payment_method_id,
+        stats=stats,
+    )
+
+    return stats
 
 async def delete_transaction(uid: str, transaction_id: int) -> bool:
-    """Delete a transaction. Returns True if deleted, False if not found or not owned by uid."""
+    """
+    Delete a transaction.
+    Returns True if deleted, False if not found or not owned by uid.
+    """
     pool = await get_pool()
+
     async with pool.acquire() as conn:
-        result = await conn.execute(
-            "DELETE FROM transactions WHERE id = $1 AND uid = $2",
-            transaction_id, uid,
-        )
-        return result == "DELETE 1"
+        row = await conn.fetchrow("""
+            DELETE FROM transactions
+            WHERE id = $1 AND uid = $2
+            RETURNING transacted_at
+        """, transaction_id, uid)
+
+    if not row:
+        return False
+
+    transacted_at = row["transacted_at"]
+
+    await invalidate_monthly_stats_cache(
+        uid=uid,
+        year=transacted_at.year,
+        month=transacted_at.month,
+    )
+
+    return True
 
 
 async def save_transaction(
@@ -101,6 +158,7 @@ async def save_transaction(
     note: str | None = None,
 ) -> int:
     pool = await get_pool()
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO transactions
@@ -108,4 +166,11 @@ async def save_transaction(
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
         """, uid, amount, transacted_at, category_id, payment_method_id, receipt_image_url, note)
-        return row["id"]
+
+    await invalidate_monthly_stats_cache(
+        uid=uid,
+        year=transacted_at.year,
+        month=transacted_at.month,
+    )
+
+    return row["id"]
