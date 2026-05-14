@@ -22,7 +22,7 @@ from app.services.line_state_service import (
     get_manual_entry_state,
     set_manual_entry_state,
 )
-from app.services.receipt_service import parse_receipt_bytes, optimize_receipt_image
+from app.services.receipt_service import parse_receipt_image_async
 
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
 LINE_PUSH_URL    = "https://api.line.me/v2/bot/message/push"
@@ -265,9 +265,9 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str, 
     await reply_message(reply_token, t("processing", lang))
 
     try:
-        image_bytes                  = await download_image_from_line(message_id)
-        optimized_bytes, mime_type   = optimize_receipt_image(image_bytes, max_width=768, jpeg_quality=75)
-        parsed                       = parse_receipt_bytes(optimized_bytes, mime_type=mime_type)
+        image_bytes = await download_image_from_line(message_id)
+        parsed = await parse_receipt_image_async(image_bytes)
+
     except Exception:
         traceback.print_exc()
         await push_message(user_id, t("parse_failed", lang))
