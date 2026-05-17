@@ -31,3 +31,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     transacted_at       TIMESTAMP NOT NULL,
     created_at          TIMESTAMP DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_transactions_uid_transacted_at
+ON transactions (uid, transacted_at);

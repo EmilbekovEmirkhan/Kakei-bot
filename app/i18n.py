@@ -85,6 +85,11 @@ _S: dict[str, dict[str, str]] = {
             "━━━━━━━━━━━━\n"
             "💡 言語変更:「言語変更」と送信"
         ),
+
+        # ── Rate limiting ───────────────────────────────────
+        "rate_limited_text":    "少しメッセージが多すぎます。少し待ってからもう一度お試しください 🙏",
+        "rate_limited_image":   "画像の送信が多すぎます。少し待ってからもう一度レシートを送ってください 🙏",
+        "receipt_already_processing":"前のレシートをまだ処理中です。少し待ってください 🙏",
     },
 
     "en": {
@@ -166,6 +171,11 @@ _S: dict[str, dict[str, str]] = {
             "━━━━━━━━━━━━\n"
             "💡 Change language: type \"change language\""
         ),
+
+        # ── Rate limiting ───────────────────────────────────
+        "rate_limited_text":    "You're sending messages a bit too quickly. Please wait a moment and try again 🙏",
+        "rate_limited_image":   "You're sending images too quickly. Please wait a moment before sending another receipt 🙏",
+        "receipt_already_processing":"I'm still processing your previous receipt. Please wait a moment 🙏",
     },
 }
 

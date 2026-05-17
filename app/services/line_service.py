@@ -22,11 +22,32 @@ from app.services.line_state_service import (
     get_manual_entry_state,
     set_manual_entry_state,
 )
-from app.services.receipt_service import parse_receipt_bytes, optimize_receipt_image
-
+from app.services.receipt_service import parse_receipt_image_async
+from app.services.rate_limit_service import (
+    is_rate_limited,
+    is_temporarily_blocked,
+    temporarily_block_user,
+    should_send_warning,
+    acquire_user_lock,
+    release_user_lock,
+)
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
 LINE_PUSH_URL    = "https://api.line.me/v2/bot/message/push"
 LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content"
+
+TEXT_LIMIT = 30
+TEXT_WINDOW_SECONDS = 60
+TEXT_BLOCK_SECONDS = 60
+
+IMAGE_LIMIT = 3
+IMAGE_WINDOW_SECONDS = 60
+IMAGE_BLOCK_SECONDS = 60
+
+POSTBACK_LIMIT = 30
+POSTBACK_WINDOW_SECONDS = 60
+POSTBACK_BLOCK_SECONDS = 60
+
+RECEIPT_PROCESSING_LOCK_SECONDS = 120
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -201,10 +222,12 @@ async def handle_follow(event: dict):
     try:
         profile = await get_line_profile(user_id)
         name    = profile.get("displayName", "")
+        lang    = profile.get("language", "")
     except Exception:
         traceback.print_exc()
         name = ""
-    await create_user(uid=user_id, name=name)
+        lang = "jp"
+    await create_user(uid=user_id, name=name, language_code=lang)
     if reply_token:
         await ask_language(reply_token, welcome=True)
 
@@ -221,18 +244,80 @@ async def handle_message(event: dict):
     message     = event.get("message", {})
     reply_token = event.get("replyToken")
     user_id     = event.get("source", {}).get("userId")
+
     if not reply_token or not user_id:
         return
-    if message.get("type") == "image":
-        await handle_image_message(reply_token, message["id"], user_id)
-    elif message.get("type") == "text":
-        await handle_text_message(reply_token, user_id, message)
 
+    message_type = message.get("type")
+    lang = await get_user_language(user_id)
 
-async def handle_text_message(reply_token: str, user_id: str, message: dict):
+    if message_type == "image":
+        scope = "image"
+
+        if await is_temporarily_blocked(user_id, scope):
+            return
+
+        limited = await is_rate_limited(
+            uid=user_id,
+            scope=scope,
+            limit=IMAGE_LIMIT,
+            window_seconds=IMAGE_WINDOW_SECONDS,
+        )
+
+        if limited:
+            await temporarily_block_user(
+                uid=user_id,
+                scope=scope,
+                ttl_seconds=IMAGE_BLOCK_SECONDS,
+            )
+
+            if await should_send_warning(
+                uid=user_id,
+                scope=scope,
+                cooldown_seconds=IMAGE_BLOCK_SECONDS,
+            ):
+                await reply_message(reply_token, t("rate_limited_image", lang))
+
+            return
+
+        await handle_image_message(reply_token, message["id"], user_id, lang)
+        return
+
+    if message_type == "text":
+        scope = "text"
+
+        if await is_temporarily_blocked(user_id, scope):
+            return
+
+        limited = await is_rate_limited(
+            uid=user_id,
+            scope=scope,
+            limit=TEXT_LIMIT,
+            window_seconds=TEXT_WINDOW_SECONDS,
+        )
+
+        if limited:
+            await temporarily_block_user(
+                uid=user_id,
+                scope=scope,
+                ttl_seconds=TEXT_BLOCK_SECONDS,
+            )
+
+            if await should_send_warning(
+                uid=user_id,
+                scope=scope,
+                cooldown_seconds=TEXT_BLOCK_SECONDS,
+            ):
+                await reply_message(reply_token, t("rate_limited_text", lang))
+
+            return
+
+        await handle_text_message(reply_token, user_id, message, lang)
+        return
+
+async def handle_text_message(reply_token: str, user_id: str, message: dict, lang: str):
     text  = message.get("text", "").strip()
     lower = text.lower()
-    lang  = await get_user_language(user_id)
 
     if text == "言語変更" or lower == "change language":
         await ask_language(reply_token)
@@ -248,30 +333,45 @@ async def handle_text_message(reply_token: str, user_id: str, message: dict):
 
     state = await get_manual_entry_state(user_id)
     if state:
-        state_lang = state.get("lang", lang)
         if state.get("flow") == "receipt":
-            await handle_receipt_text_input(reply_token, user_id, text, state, state_lang)
+            await handle_receipt_text_input(reply_token, user_id, text, state, lang)
         else:
-            await handle_manual_text_input(reply_token, user_id, text, state, state_lang)
+            await handle_manual_text_input(reply_token, user_id, text, state, lang)
         return
 
     await reply_message(reply_token, t("unknown_message", lang))
 
 
-async def handle_image_message(reply_token: str, message_id: str, user_id: str):
-    lang = await get_user_language(user_id)
+async def handle_image_message(reply_token: str, message_id: str, user_id: str, lang: str):
+    lock_acquired = await acquire_user_lock(
+        uid=user_id,
+        lock_name="receipt_processing",
+        ttl_seconds=RECEIPT_PROCESSING_LOCK_SECONDS,
+    )
 
-    # Acknowledge immediately with the reply token (one-time use)
+    if not lock_acquired:
+        if await should_send_warning(
+            uid=user_id,
+            scope="receipt_processing",
+            cooldown_seconds=60,
+        ):
+            await reply_message(reply_token, t("receipt_already_processing", lang))
+
+        return
+
     await reply_message(reply_token, t("processing", lang))
 
     try:
-        image_bytes                  = await download_image_from_line(message_id)
-        optimized_bytes, mime_type   = optimize_receipt_image(image_bytes, max_width=768, jpeg_quality=75)
-        parsed                       = parse_receipt_bytes(optimized_bytes, mime_type=mime_type)
+        image_bytes = await download_image_from_line(message_id)
+        parsed = await parse_receipt_image_async(image_bytes)
+
     except Exception:
         traceback.print_exc()
         await push_message(user_id, t("parse_failed", lang))
         return
+
+    finally:
+        await release_user_lock(user_id, "receipt_processing")
 
     scanned_cat_id     = parsed.get("category_id")
     scanned_payment_id = parsed.get("payment_method_id")
@@ -307,10 +407,8 @@ async def ask_language(reply_token: str, welcome: bool = False):
             "text": (
                 "👋 こんにちは！ Welcome!\n\n"
                 "家計 (Kakei) へようこそ！🏠\n"
-                "レシートを写真で撮るだけで、自動で家計簿に記録できる\n"
-                "LINEボットです 🧾✨\n\n"
-                "Kakei is your personal LINE budget tracker —\n"
-                "just snap a receipt and we log it automatically! ✨"
+                "レシートを写真で撮るだけで、自動で家計簿に記録できるLINEボットです 🧾✨\n\n"
+                "Kakei is your personal LINE budget tracker - just snap a receipt and we log it automatically! ✨"
             ),
         })
     messages.append({
@@ -339,6 +437,35 @@ async def handle_postback(event: dict):
     user_id     = event.get("source", {}).get("userId")
     if not reply_token or not user_id:
         return
+    
+    scope = "postback"
+
+    if await is_temporarily_blocked(user_id, scope):
+        return
+
+    limited = await is_rate_limited(
+        uid=user_id,
+        scope=scope,
+        limit=POSTBACK_LIMIT,
+        window_seconds=POSTBACK_WINDOW_SECONDS,
+    )
+
+    if limited:
+        await temporarily_block_user(
+            uid=user_id,
+            scope=scope,
+            ttl_seconds=POSTBACK_BLOCK_SECONDS,
+        )
+
+        if await should_send_warning(
+            uid=user_id,
+            scope=scope,
+            cooldown_seconds=POSTBACK_BLOCK_SECONDS,
+        ):
+            lang = await get_user_language(user_id)
+            await reply_message(reply_token, t("rate_limited_text", lang))
+
+        return
 
     postback = event.get("postback", {})
     data     = parse_postback_data(postback.get("data", ""))
@@ -357,13 +484,13 @@ async def handle_postback(event: dict):
     if flow == "manual":
         state = await get_manual_entry_state(user_id)
         lang  = state.get("lang") if state else await get_user_language(user_id)
-        await handle_manual_postback(reply_token, user_id, data, postback, lang)
+        await handle_manual_postback(reply_token, user_id, data, postback, state, lang)
         return
 
     if flow == "receipt":
         state = await get_manual_entry_state(user_id)
         lang  = state.get("lang") if state else await get_user_language(user_id)
-        await handle_receipt_postback(reply_token, user_id, data, postback, lang)
+        await handle_receipt_postback(reply_token, user_id, data, postback, state, lang)
         return
 
 
@@ -517,14 +644,13 @@ async def ask_confirm(reply_token: str, state: dict, lang: str):
 
 
 async def handle_manual_postback(
-    reply_token: str, user_id: str, data: dict, postback: dict, lang: str
+    reply_token: str, user_id: str, data: dict, postback: dict, state: dict, lang: str
 ):
     step = data.get("step")
 
     # ── Back navigation ───────────────────────────────────────────────────
 
     if step == "back_date":
-        state = await get_manual_entry_state(user_id)
         if state:
             state["step"] = "date"
             await set_manual_entry_state(user_id, state)
@@ -532,7 +658,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_category":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -542,7 +667,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_payment":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -552,7 +676,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_amount":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -562,7 +685,6 @@ async def handle_manual_postback(
         return
 
     if step == "back_note":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -578,14 +700,12 @@ async def handle_manual_postback(
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
             return
-        state = await get_manual_entry_state(user_id) or {}
         state.update({"flow": "manual", "step": "category", "date": selected_date, "lang": lang})
         await set_manual_entry_state(user_id, state)
         await ask_category(reply_token, selected_date, lang)
         return
 
     if step == "category":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -605,7 +725,6 @@ async def handle_manual_postback(
         return
 
     if step == "payment":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -625,7 +744,6 @@ async def handle_manual_postback(
         return
 
     if step == "note_skip":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -635,7 +753,6 @@ async def handle_manual_postback(
         return
 
     if step == "note_add":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -645,7 +762,6 @@ async def handle_manual_postback(
         return
 
     if step == "confirm":
-        state = await get_manual_entry_state(user_id)
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
@@ -883,10 +999,9 @@ async def ask_receipt_final_confirm(reply_token: str, state: dict, lang: str):
 
 
 async def handle_receipt_postback(
-    reply_token: str, user_id: str, data: dict, postback: dict, lang: str
+    reply_token: str, user_id: str, data: dict, postback: dict, state: dict, lang: str
 ):
     step  = data.get("step")
-    state = await get_manual_entry_state(user_id)
 
     if not state or state.get("flow") != "receipt":
         await reply_message(reply_token, t("session_expired_receipt", lang))
