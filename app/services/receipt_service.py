@@ -42,7 +42,8 @@ Payment:
 
 Rules:
 For store name, return the merchant/store name as text. If unclear, return null.
-Use final paid total, not subtotal.
+For the amount, use the 合計 or 小計 line (the bill total the customer owes).
+NEVER use 現金/お預り (cash tendered) or お釣り (change) as the amount.
 If category unsure, use 7.
 If payment unsure, use 5.
 IC/Suica/PASMO/nanaco/WAON/iD/QUICPay/Edy = 3.
