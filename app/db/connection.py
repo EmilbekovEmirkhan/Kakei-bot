@@ -11,8 +11,7 @@ async def get_pool() -> asyncpg.Pool:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        database_url = DATABASE_URL
-        _pool = await asyncpg.create_pool(database_url, ssl=ctx)
+        _pool = await asyncpg.create_pool(DATABASE_URL, ssl=ctx)
     return _pool
 
 

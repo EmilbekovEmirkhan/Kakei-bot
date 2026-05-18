@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家計 — Kakei</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:      #06C755;
+      --green-dark: #04A843;
+      --green-bg:   #E8FAF0;
+      --text:       #1a1a1a;
+      --sub:        #666;
+      --card-bg:    #ffffff;
+      --border:     #e0e0e0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+      background: var(--green-bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--green);
+      color: #fff;
+      padding: 20px 16px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    header .logo span { font-size: 13px; font-weight: 400; opacity: .8; margin-left: 6px; }
+    header .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      object-fit: cover; border: 2px solid rgba(255,255,255,.5);
+      margin-left: auto;
+    }
+
+    /* ── Month nav ── */
+    .month-nav {
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+      padding: 14px 16px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+    }
+    .month-nav button {
+      background: none; border: none; font-size: 20px; cursor: pointer;
+      color: var(--green); padding: 4px 8px; border-radius: 6px;
+      transition: background .15s;
+    }
+    .month-nav button:hover { background: var(--green-bg); }
+    .month-nav .label { font-size: 15px; font-weight: 600; min-width: 120px; text-align: center; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .filter-bar::-webkit-scrollbar { display: none; }
+
+    .chip {
+      flex-shrink: 0;
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s, border-color .15s, color .15s;
+      color: var(--text);
+    }
+    .chip.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ── Sort bar ── */
+    .sort-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sort-label { font-size: 11px; color: var(--sub); flex-shrink: 0; }
+    .sort-btn {
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text);
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .sort-btn.active {
+      border-color: var(--green-dark);
+      color: var(--green-dark);
+      font-weight: 600;
+    }
+    .sort-arrow { font-size: 10px; }
+
+    /* ── Cards ── */
+    .container { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .card-title { font-size: 12px; color: var(--sub); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+
+    /* ── Total ── */
+    .total-amount {
+      font-size: 36px; font-weight: 800; color: var(--green-dark);
+      letter-spacing: -1px;
+    }
+    .total-amount .yen { font-size: 22px; font-weight: 600; }
+    .total-meta { font-size: 13px; color: var(--sub); margin-top: 4px; }
+
+    /* ── Category rows ── */
+    .cat-list { display: flex; flex-direction: column; margin-top: 4px; }
+
+    .cat-row { border-bottom: 1px solid var(--border); }
+    .cat-row:last-child { border-bottom: none; }
+
+    .cat-header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 14px; padding: 10px 0;
+      cursor: pointer; user-select: none;
+    }
+    .cat-header:active { opacity: .7; }
+
+    .cat-name { display: flex; align-items: center; gap: 6px; }
+    .cat-chevron {
+      font-size: 11px; color: var(--sub);
+      transition: transform .2s;
+      margin-left: 6px;
+    }
+    .cat-row.open .cat-chevron { transform: rotate(90deg); }
+
+    .cat-amount { font-weight: 700; font-size: 13px; }
+    .cat-pct-text { font-size: 11px; color: var(--sub); }
+
+    .bar-track { background: var(--green-bg); border-radius: 99px; height: 6px; overflow: hidden; margin-bottom: 2px; }
+    .bar-fill  { background: var(--green); height: 100%; border-radius: 99px; transition: width .5s ease; }
+
+    /* ── Transaction list ── */
+    .txn-list {
+      display: none;
+      flex-direction: column;
+      padding-bottom: 6px;
+    }
+    .cat-row.open .txn-list { display: flex; }
+
+    .txn-item {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 8px 0 8px 28px;
+      border-top: 1px solid #f0f0f0;
+      font-size: 13px;
+    }
+    .txn-left { display: flex; flex-direction: column; gap: 2px; }
+    .txn-date { font-size: 11px; color: var(--sub); }
+    .txn-payment { font-size: 11px; color: var(--sub); }
+    .txn-note { font-size: 12px; color: #444; margin-top: 2px; font-style: italic; }
+    .txn-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-left: 8px; }
+    .txn-amount { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
+    .txn-delete {
+      background: none; border: none; cursor: pointer;
+      font-size: 16px; opacity: .4; padding: 0;
+      transition: opacity .15s;
+    }
+    .txn-delete:hover { opacity: 1; }
+
+    /* ── Loading / Error ── */
+    .state-box {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 60px 16px; gap: 12px; color: var(--sub); text-align: center;
+    }
+    .state-box .icon { font-size: 40px; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--green-bg);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty { color: var(--sub); font-size: 14px; text-align: center; padding: 16px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">家計<span>Kakei</span></div>
+  <img id="avatar" class="avatar" src="" alt="" style="display:none" />
+</header>
+
+<div class="month-nav">
+  <button onclick="changeMonth(-1)">‹</button>
+  <div class="label" id="month-label">…</div>
+  <button id="next-btn" onclick="changeMonth(+1)">›</button>
+</div>
+
+<div class="filter-bar" id="filter-bar">
+  <!-- chips injected by buildFilterChips() -->
+</div>
+
+<div class="sort-bar">
+  <span class="sort-label" id="sort-label"></span>
+  <button class="sort-btn active" id="sort-date" onclick="setSort('date')">
+    <span id="sort-date-label"></span>
+    <span class="sort-arrow" id="arrow-date">↓</span>
+  </button>
+  <button class="sort-btn" id="sort-amount" onclick="setSort('amount')">
+    <span id="sort-amount-label"></span>
+    <span class="sort-arrow" id="arrow-amount">↓</span>
+  </button>
+</div>
+
+<div class="container" id="main">
+  <div class="state-box"><div class="spinner"></div></div>
+</div>
+
+<script>
+  const LIFF_ID = "{{LIFF_ID}}";
+
+  let currentYear       = new Date().getFullYear();
+  let currentMonth      = new Date().getMonth() + 1;
+  let accessToken       = null;
+  let selectedPaymentId = null;
+  let sortKey           = "date";
+  let sortDir           = "desc";
+  let lastData          = null;
+  let appLang           = "ja";   // updated after first API response
+
+  // ── i18n ──────────────────────────────────────────────
+  const MONTHS_JA = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+  const MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const PAYMENT_FILTERS = [
+    { id: null, icon: "",   ja: "すべて",           en: "All" },
+    { id: 1,    icon: "💴", ja: "現金",             en: "Cash" },
+    { id: 2,    icon: "💳", ja: "クレカ",           en: "Card" },
+    { id: 3,    icon: "📱", ja: "電子マネー",       en: "e-Money" },
+    { id: 4,    icon: "📲", ja: "QR",               en: "QR" },
+    { id: 5,    icon: "❓", ja: "不明",             en: "Unknown" },
+  ];
+
+  const UI = {
+    ja: {
+      monthLabel:     (y, m) => `${y}年 ${MONTHS_JA[m - 1]}`,
+      loading:        "データを取得中",
+      noData:         "📭 この月のデータはありません",
+      totalTitle:     "月合計",
+      totalMeta:      (count, filter) => `${count}件の支出${filter}`,
+      byCategory:     "カテゴリ別",
+      sortLabel:      "並び替え：",
+      sortDate:       "📅 日付",
+      sortAmount:     "💴 金額",
+      items:          n => `${n}件`,
+      deleteConfirm:  "この支出を削除しますか？",
+      deleteFail:     "削除失敗",
+      serverError:    code => "サーバーエラー " + code,
+      liffError:      msg  => "LIFF初期化エラー: " + msg,
+    },
+    en: {
+      monthLabel:     (y, m) => `${MONTHS_EN[m - 1]} ${y}`,
+      loading:        "Loading…",
+      noData:         "📭 No data for this month",
+      totalTitle:     "Monthly total",
+      totalMeta:      (count, filter) => `${count} transaction${count !== 1 ? "s" : ""}${filter}`,
+      byCategory:     "By category",
+      sortLabel:      "Sort: ",
+      sortDate:       "📅 Date",
+      sortAmount:     "💴 Amount",
+      items:          n => `${n} item${n !== 1 ? "s" : ""}`,
+      deleteConfirm:  "Delete this transaction?",
+      deleteFail:     "Delete failed",
+      serverError:    code => "Server error " + code,
+      liffError:      msg  => "LIFF init error: " + msg,
+    },
+  };
+
+  const ui = () => UI[appLang] || UI.ja;
+
+  // ── Filter chips ───────────────────────────────────────
+  function buildFilterChips() {
+    const bar = document.getElementById("filter-bar");
+    bar.innerHTML = PAYMENT_FILTERS.map(f => {
+      const label    = f.icon ? `${f.icon} ${f[appLang] || f.ja}` : (f[appLang] || f.ja);
+      const isActive = f.id === selectedPaymentId;
+      return `<button class="chip${isActive ? " active" : ""}" onclick="setPaymentFilter(this, ${JSON.stringify(f.id)})">${label}</button>`;
+    }).join("");
+  }
+
+  // ── Sort bar labels ────────────────────────────────────
+  function updateSortLabels() {
+    document.getElementById("sort-label").textContent       = ui().sortLabel;
+    document.getElementById("sort-date-label").textContent  = ui().sortDate;
+    document.getElementById("sort-amount-label").textContent = ui().sortAmount;
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  buildFilterChips();
+  updateSortLabels();
+  updateMonthLabel();
+
+  liff.init({ liffId: LIFF_ID })
+    .then(() => {
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      accessToken = liff.getAccessToken();
+
+      const profile = liff.getDecodedIDToken();
+      if (profile && profile.picture) {
+        const img = document.getElementById("avatar");
+        img.src = profile.picture;
+        img.style.display = "block";
+      }
+
+      loadStats();
+    })
+    .catch(err => showError(ui().liffError(err.message)));
+
+  // ── Month navigation ──────────────────────────────────
+  function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 12) { currentMonth = 1;  currentYear++; }
+    if (currentMonth < 1)  { currentMonth = 12; currentYear--; }
+
+    const now = new Date();
+    if (currentYear > now.getFullYear() ||
+        (currentYear === now.getFullYear() && currentMonth > now.getMonth() + 1)) {
+      currentMonth -= delta;
+      return;
+    }
+    loadStats();
+  }
+
+  function updateMonthLabel() {
+    document.getElementById("month-label").textContent = ui().monthLabel(currentYear, currentMonth);
+
+    const now   = new Date();
+    const atNow = currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1;
+    document.getElementById("next-btn").style.visibility = atNow ? "hidden" : "visible";
+  }
+
+  // ── Payment filter ────────────────────────────────────
+  function setPaymentFilter(btn, id) {
+    selectedPaymentId = id;
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    btn.classList.add("active");
+    loadStats();
+  }
+
+  // ── Sort ──────────────────────────────────────────────
+  function setSort(key) {
+    if (sortKey === key) {
+      sortDir = sortDir === "desc" ? "asc" : "desc";
+    } else {
+      sortKey = key;
+      sortDir = "desc";
+    }
+    updateSortUI();
+    if (lastData) renderStats(lastData);
+  }
+
+  function updateSortUI() {
+    ["date", "amount"].forEach(k => {
+      const btn   = document.getElementById("sort-" + k);
+      const arrow = document.getElementById("arrow-" + k);
+      if (sortKey === k) {
+        btn.classList.add("active");
+        arrow.textContent = sortDir === "desc" ? "↓" : "↑";
+      } else {
+        btn.classList.remove("active");
+        arrow.textContent = "↓";
+      }
+    });
+  }
+
+  function sortTransactions(txns) {
+    return [...txns].sort((a, b) => {
+      let diff = 0;
+      if (sortKey === "date")   diff = a.date.localeCompare(b.date);
+      if (sortKey === "amount") diff = a.amount - b.amount;
+      return sortDir === "desc" ? -diff : diff;
+    });
+  }
+
+  const maxDate = cat => (cat.transactions || []).reduce(
+    (m, tx) => tx.date > m ? tx.date : m, ""
+  );
+
+  function sortCategories(cats) {
+    return [...cats].sort((a, b) => {
+      const diff = sortKey === "amount"
+        ? a.subtotal - b.subtotal
+        : maxDate(a).localeCompare(maxDate(b));
+      return sortDir === "desc" ? -diff : diff;
+    });
+  }
+
+  function getOpenCategories() {
+    const names = new Set();
+    document.querySelectorAll(".cat-row.open").forEach(el => names.add(el.dataset.catname));
+    return names;
+  }
+
+  // ── Fetch ─────────────────────────────────────────────
+  async function loadStats() {
+    updateMonthLabel();
+    setLoading();
+    try {
+      let url = `/api/stats?year=${currentYear}&month=${currentMonth}`;
+      if (selectedPaymentId !== null) url += `&payment_method_id=${selectedPaymentId}`;
+
+      const resp = await fetch(url, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!resp.ok) throw new Error(ui().serverError(resp.status));
+      lastData = await resp.json();
+
+      // Apply user language from backend
+      if (lastData.lang && lastData.lang !== appLang) {
+        appLang = lastData.lang;
+        buildFilterChips();
+        updateSortLabels();
+        updateMonthLabel();
+      }
+
+      renderStats(lastData);
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function renderStats(data) {
+    const main = document.getElementById("main");
+
+    if (data.count === 0) {
+      main.innerHTML = `<div class="card"><div class="empty">${ui().noData}</div></div>`;
+      return;
+    }
+
+    const total     = data.total;
+    const openNames = getOpenCategories();
+
+    let catsHtml = "";
+    sortCategories(data.by_category).forEach((cat, idx) => {
+      const pct     = total > 0 ? Math.round((cat.subtotal / total) * 100) : 0;
+      const sorted  = sortTransactions(cat.transactions || []);
+      const wasOpen = openNames.has(cat.name);
+
+      let txnsHtml = "";
+      sorted.forEach(tx => {
+        const note = tx.note ? `<div class="txn-note">💬 ${tx.note}</div>` : "";
+        txnsHtml += `
+          <div class="txn-item" id="txn-${tx.id}">
+            <div class="txn-left">
+              <div class="txn-date">📅 ${tx.date}</div>
+              <div class="txn-payment">${tx.payment}</div>
+              ${note}
+            </div>
+            <div class="txn-right">
+              <div class="txn-amount">¥${tx.amount.toLocaleString()}</div>
+              <button class="txn-delete" onclick="deleteTxn(${tx.id}, this)" title="🗑">🗑</button>
+            </div>
+          </div>`;
+      });
+
+      catsHtml += `
+        <div class="cat-row${wasOpen ? " open" : ""}" id="cat-${idx}" data-catname="${cat.name}">
+          <div class="cat-header" onclick="toggleCat(${idx})">
+            <div class="cat-name">
+              <span>${cat.icon}</span>
+              <span>${cat.name}</span>
+              <span class="cat-chevron">›</span>
+            </div>
+            <div style="text-align:right">
+              <div class="cat-amount">¥${cat.subtotal.toLocaleString()}</div>
+              <div class="cat-pct-text">${pct}% · ${ui().items(cat.count)}</div>
+            </div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div class="txn-list">${txnsHtml}</div>
+        </div>`;
+    });
+
+    const activeChip = document.querySelector(".chip.active");
+    const filterNote = selectedPaymentId !== null && activeChip
+      ? ` · ${activeChip.textContent.trim()}`
+      : "";
+
+    main.innerHTML = `
+      <div class="card">
+        <div class="card-title">${ui().totalTitle}</div>
+        <div class="total-amount"><span class="yen">¥</span>${total.toLocaleString()}</div>
+        <div class="total-meta">${ui().totalMeta(data.count, filterNote)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">${ui().byCategory}</div>
+        <div class="cat-list">${catsHtml}</div>
+      </div>`;
+  }
+
+  async function deleteTxn(id, btn) {
+    if (!confirm(ui().deleteConfirm)) return;
+    btn.disabled = true;
+    btn.textContent = "…";
+    try {
+      const resp = await fetch(`/api/transaction/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+      if (!resp.ok) throw new Error(ui().deleteFail);
+      await loadStats();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "🗑";
+      alert(e.message);
+    }
+  }
+
+  function toggleCat(idx) {
+    document.getElementById("cat-" + idx).classList.toggle("open");
+  }
+
+  function setLoading() {
+    document.getElementById("main").innerHTML =
+      `<div class="state-box"><div class="spinner"></div><div>${ui().loading}</div></div>`;
+  }
+
+  function showError(msg) {
+    document.getElementById("main").innerHTML =
+      `<div class="state-box"><div class="icon">⚠️</div><div>${msg}</div></div>`;
+  }
+</script>
+</body>
+</html>
