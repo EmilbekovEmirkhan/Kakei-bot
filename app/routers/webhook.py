@@ -7,6 +7,12 @@ from app.services.line_service import verify_signature, handle_event
 
 router = APIRouter()
 
+sem = asyncio.Semaphore(10)
+
+async def bounded(e):
+    async with sem:
+        await handle_event(e)
+
 @router.post("/webhook")
 async def webhook(request: Request):
     body = await request.body()
@@ -15,6 +21,6 @@ async def webhook(request: Request):
 
     events = json.loads(body).get("events", [])
     if events:
-        await asyncio.gather(*[handle_event(e) for e in events])
+        await asyncio.gather(*[bounded(e) for e in events])
 
     return JSONResponse({"status": "ok"})
