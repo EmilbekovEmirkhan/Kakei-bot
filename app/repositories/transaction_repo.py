@@ -7,6 +7,7 @@ from app.services.transaction_cache_service import (
     set_cached_monthly_stats,
     invalidate_monthly_stats_cache,
 )
+from app.services.s3_service import delete_receipt_image
 
 def get_month_range(year: int, month: int) -> tuple[datetime, datetime]:
     if month < 1 or month > 12:
@@ -131,7 +132,7 @@ async def delete_transaction(uid: str, transaction_id: int) -> bool:
         row = await conn.fetchrow("""
             DELETE FROM transactions
             WHERE id = $1 AND uid = $2
-            RETURNING transacted_at
+            RETURNING transacted_at, receipt_image_url
         """, transaction_id, uid)
 
     if not row:
@@ -144,6 +145,9 @@ async def delete_transaction(uid: str, transaction_id: int) -> bool:
         year=transacted_at.year,
         month=transacted_at.month,
     )
+
+    if row["receipt_image_url"]:
+        delete_receipt_image(row["receipt_image_url"])
 
     return True
 

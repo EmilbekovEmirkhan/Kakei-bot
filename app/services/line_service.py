@@ -31,6 +31,8 @@ from app.services.rate_limit_service import (
     acquire_user_lock,
     release_user_lock,
 )
+from app.services.s3_service import upload_receipt_image
+
 LINE_REPLY_URL   = "https://api.line.me/v2/bot/message/reply"
 LINE_PUSH_URL    = "https://api.line.me/v2/bot/message/push"
 LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{message_id}/content"
@@ -391,6 +393,9 @@ async def handle_image_message(reply_token: str, message_id: str, user_id: str, 
         "payment_method_id":   payment["id"]               if payment  else None,
         "payment_method_name": _pay_name(payment, lang)    if payment  else None,
         "payment_method_icon": payment["icon"]             if payment  else None,
+        "message_id":          message_id,
+        "receipt_image_bytes": image_bytes.hex(),
+        "receipt_image_url":   None,
         "note":                None,
     }
     await set_manual_entry_state(user_id, state)
@@ -1191,6 +1196,15 @@ async def save_transaction_from_state(
         date_str      = state.get("date")
         transacted_at = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
         note          = state.get("note")
+        image_hex     = state.get("receipt_image_bytes")
+
+        if image_hex:
+            image_bytes = bytes.fromhex(image_hex)
+            receipt_image_url = await upload_receipt_image(
+                uid=user_id,
+                image_bytes=image_bytes,
+                message_id=state.get("message_id"),
+            )
 
         await save_transaction(
             uid=user_id,
@@ -1198,7 +1212,7 @@ async def save_transaction_from_state(
             transacted_at=transacted_at,
             category_id=state.get("category_id"),
             payment_method_id=state.get("payment_method_id"),
-            receipt_image_url=None,
+            receipt_image_url=receipt_image_url,
             note=note,
         )
         await delete_manual_entry_state(user_id)
