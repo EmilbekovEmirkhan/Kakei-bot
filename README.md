@@ -27,6 +27,7 @@ A bilingual (🇯🇵 / 🇬🇧) LINE chatbot that scans receipt images with **
 | AI / OCR | Google Gemini 2.5 Flash |
 | HTTP client | httpx (async) |
 | Tunneling (dev) | ngrok |
+| Image storage   | AWS S3 |
 
 ---
 
@@ -83,6 +84,11 @@ GEMINI_API_KEY=your_gemini_api_key
 DATABASE_URL=postgresql://user:password@host:port/dbname
 REDIS_URL=redis://default:password@host:port
 LIFF_ID=your_liff_id
+
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_S3_BUCKET=your_aws_s3_bucker
+AWS_REGION=your_aws_region
 ```
 
 | Variable | Where to find it |
@@ -93,6 +99,10 @@ LIFF_ID=your_liff_id
 | `DATABASE_URL` | Railway → your Postgres service → Variables → `DATABASE_URL` |
 | `REDIS_URL` | Railway → your Redis service → Variables → `REDIS_URL` |
 | `LIFF_ID` | See step 6 below |
+| `AWS_ACCESS_KEY_ID` | AWS Console → IAM → Users → your bot user → Security credentials → Access keys |
+| `AWS_SECRET_ACCESS_KEY` | Same as above (only shown once at creation) |
+| `AWS_S3_BUCKET` | AWS Console → S3 → your bucket name |
+| `AWS_REGION` | `ap-northeast-1` for Tokyo |
 
 ### 5. Start the server
 
@@ -179,7 +189,8 @@ LINE-Budget-Tracker/
 │   ├── services/
 │   │   ├── line_service.py          # Event handling, reply logic, state machine
 │   │   ├── line_state_service.py    # Redis-backed conversation state (15 min TTL)
-│   │   └── receipt_service.py       # Gemini receipt parsing
+│   │   ├── receipt_service.py       # Gemini receipt parsing
+│   │   └── s3_service.py            # S3 upload, delete, and pre-signed URL generation
 │   └── static/
 │       └── liff/
 │           └── index.html           # LIFF miniapp (monthly stats UI, bilingual)
