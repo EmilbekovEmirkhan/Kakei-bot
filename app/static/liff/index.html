@@ -208,6 +208,28 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty { color: var(--sub); font-size: 14px; text-align: center; padding: 16px 0; }
+
+    .txn-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .receipt-btn {
+      background: var(--green-bg);
+      border: 1.5px solid var(--green);
+      color: var(--green-dark);
+      border-radius: 6px;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .receipt-btn:active {
+      background: var(--green);
+      color: #fff;
+      transform: scale(.92);
+    }
   </style>
 </head>
 <body>
@@ -242,7 +264,16 @@
 <div class="container" id="main">
   <div class="state-box"><div class="spinner"></div></div>
 </div>
-
+<div id="receipt-modal" onclick="closeReceipt()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;
+         flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;">
+  <img id="receipt-full" src="" style="max-width:100%;max-height:80vh;border-radius:10px;object-fit:contain;" />
+  <a id="receipt-dl" href="" download target="_blank" onclick="event.stopPropagation()"
+     style="color:#fff;background:var(--green);padding:10px 24px;border-radius:99px;text-decoration:none;font-weight:600;">
+    ⬇ ダウンロード / Download
+  </a>
+  <div style="color:rgba(255,255,255,.6);font-size:12px;">タップして閉じる / Tap to close</div>
+</div>
 <script>
   const LIFF_ID = "{{LIFF_ID}}";
 
@@ -477,6 +508,14 @@
       let txnsHtml = "";
       sorted.forEach(tx => {
         const note = tx.note ? `<div class="txn-note">💬 ${tx.note}</div>` : "";
+        const receipt = tx.has_receipt
+          ? `<button class="receipt-btn" onclick="openReceipt(${tx.id})" title="レシート">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>`
+          : "";
         txnsHtml += `
           <div class="txn-item" id="txn-${tx.id}">
             <div class="txn-left">
@@ -486,7 +525,10 @@
             </div>
             <div class="txn-right">
               <div class="txn-amount">¥${tx.amount.toLocaleString()}</div>
-              <button class="txn-delete" onclick="deleteTxn(${tx.id}, this)" title="🗑">🗑</button>
+              <div class="txn-actions">
+                ${receipt}
+                <button class="txn-delete" onclick="deleteTxn(${tx.id}, this)" title="削除">🗑</button>
+              </div>
             </div>
           </div>`;
       });
@@ -556,6 +598,18 @@
   function showError(msg) {
     document.getElementById("main").innerHTML =
       `<div class="state-box"><div class="icon">⚠️</div><div>${msg}</div></div>`;
+  }
+  async function openReceipt(txnId) {
+    const resp = await fetch(`/api/receipt/${txnId}`, {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+    const { url } = await resp.json();
+    document.getElementById("receipt-full").src = url;
+    document.getElementById("receipt-dl").onclick = () => liff.openWindow({ url, external: true });
+    document.getElementById("receipt-modal").style.display = "flex";
+  }
+  function closeReceipt() {
+    document.getElementById("receipt-modal").style.display = "none";
   }
 </script>
 </body>
