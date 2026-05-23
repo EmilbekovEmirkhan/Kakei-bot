@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 
@@ -160,7 +161,7 @@ async def delete_transaction(uid: str, transaction_id: int) -> bool:
     )
 
     if row["receipt_image_url"]:
-        delete_receipt_image(row["receipt_image_url"])
+        await asyncio.to_thread(delete_receipt_image, row["receipt_image_url"])
 
     return True
 

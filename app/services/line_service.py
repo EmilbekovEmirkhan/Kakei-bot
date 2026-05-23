@@ -1196,7 +1196,8 @@ async def save_transaction_from_state(
         date_str      = state.get("date")
         transacted_at = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.now()
         note          = state.get("note")
-        image_hex     = state.get("receipt_image_bytes")
+        image_hex         = state.get("receipt_image_bytes")
+        receipt_image_url = None
 
         if image_hex:
             image_bytes = bytes.fromhex(image_hex)

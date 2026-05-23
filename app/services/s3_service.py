@@ -1,3 +1,4 @@
+import asyncio
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from datetime import datetime
@@ -24,7 +25,8 @@ async def upload_receipt_image(uid: str, image_bytes: bytes, message_id: str) ->
 
     try:
         s3 = get_s3_client()
-        s3.put_object(
+        await asyncio.to_thread(
+            s3.put_object,
             Bucket=AWS_S3_BUCKET,
             Key=key,
             Body=image_bytes,
