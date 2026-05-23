@@ -40,7 +40,7 @@ _S: dict[str, dict[str, str]] = {
         "manual_ask_confirm":   "以下の内容で登録しますか？\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}",
 
         # ── Receipt review ──────────────────────────────────
-        "receipt_review":       "🧾 {store}\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\n\n内容を確認してください",
+        "receipt_review":       "🧾 {store}\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}\n\n内容を確認してください",
         "receipt_ask_date":     "📅 日付を確認してください\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 カテゴリを確認してください\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 支払方法を確認してください\n\n{label_scanned}: {payment}",
@@ -126,7 +126,7 @@ _S: dict[str, dict[str, str]] = {
         "manual_ask_confirm":   "Save this entry?\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}",
 
         # ── Receipt review ──────────────────────────────────
-        "receipt_review":       "🧾 {store}\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\n\nPlease review your receipt",
+        "receipt_review":       "🧾 {store}\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}\n\nPlease review your receipt",
         "receipt_ask_date":     "📅 Confirm the date\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 Confirm the category\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 Confirm payment method\n\n{label_scanned}: {payment}",

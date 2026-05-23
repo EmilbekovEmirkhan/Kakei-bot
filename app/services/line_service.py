@@ -823,6 +823,7 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
         f"{state['payment_method_icon']} {state['payment_method_name']}"
         if state.get("payment_method_name") else t("label_unknown", lang)
     )
+    note_display = state.get("note") or t("label_none", lang)
     return {
         "type": "text",
         "text": t(
@@ -832,11 +833,13 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
             category=category_display,
             payment=payment_display,
             amount=amount_display,
+            note=note_display,
         ),
         "quickReply": {
             "items": [
-                quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all")),
-                quick_reply_postback_item(t("btn_edit", lang),    make_receipt_postback_data("edit")),
+                quick_reply_postback_item(t("btn_confirm", lang),  make_receipt_postback_data("confirm_all")),
+                quick_reply_postback_item(t("btn_edit", lang),     make_receipt_postback_data("edit")),
+                quick_reply_postback_item(t("btn_add_note", lang), make_receipt_postback_data("note_add"), input_option="openKeyboard"),
                 get_cancel_item(lang),
             ]
         },
@@ -1141,9 +1144,18 @@ async def handle_receipt_postback(
         return
 
     if step == "note_add":
-        state["step"] = "edit_note_input"
+        state["step"] = "review_note_input"
         await set_manual_entry_state(user_id, state)
-        await reply_message(reply_token, t("enter_note_prompt", lang))
+        await reply_raw_message(reply_token, [{
+            "type": "text",
+            "text": t("enter_note_prompt", lang),
+            "quickReply": {
+                "items": [
+                    quick_reply_postback_item(t("btn_back", lang), make_receipt_postback_data("back_review")),
+                    get_cancel_item(lang),
+                ]
+            },
+        }])
         return
 
     if step == "final_confirm":
@@ -1181,6 +1193,16 @@ async def handle_receipt_text_input(
         state.update({"note": note, "step": "edit_confirm"})
         await set_manual_entry_state(user_id, state)
         await ask_receipt_final_confirm(reply_token, state, lang)
+        return
+
+    if step == "review_note_input":
+        note = text.strip()
+        if not note:
+            await reply_message(reply_token, t("invalid_note", lang))
+            return
+        state.update({"note": note, "step": "review"})
+        await set_manual_entry_state(user_id, state)
+        await ask_receipt_review(reply_token, state, lang)
         return
 
     await reply_message(reply_token, t("invalid_action", lang))
