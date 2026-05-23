@@ -7,8 +7,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import LIFF_ID
 from app.constants import CATEGORIES, PAYMENT_METHODS
 from app.dependencies import get_current_uid
-from app.repositories.transaction_repo import delete_transaction, get_monthly_stats
+from app.repositories.transaction_repo import delete_transaction, get_monthly_stats, get_receipt_image_url
 from app.repositories.user_repo import get_user_language
+from app.services.s3_service import generate_presigned_url
 
 router = APIRouter()
 
@@ -55,6 +56,15 @@ async def api_stats(request: Request, uid: str = Depends(get_current_uid)):
     _localise_stats(stats, lang)
     return JSONResponse(stats)
 
+@router.get("/api/receipt/{txn_id}")
+async def api_receipt(txn_id: int, uid: str = Depends(get_current_uid)):
+    key = await get_receipt_image_url(txn_id, uid)
+
+    if not key:
+        raise HTTPException(status_code=404)
+
+    url = generate_presigned_url(key)
+    return JSONResponse({"url": url})
 
 @router.delete("/api/transaction/{transaction_id}")
 async def api_delete_transaction(
