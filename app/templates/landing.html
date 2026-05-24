@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  {% if lang == 'ja' %}
+  <title>家計 — LINEのAI家計簿</title>
+  <meta name="description" content="レシートを撮るだけで自動記録。LINEで使えるAI家計簿アプリ「家計」。" />
+  {% else %}
+  <title>Kakei — AI Receipt Tracker for LINE</title>
+  <meta name="description" content="Snap a receipt and Kakei logs it automatically. The AI-powered budget tracker built for LINE." />
+  {% endif %}
+
+  <meta name="robots" content="index, follow" />
+
+  <!-- Canonical & hreflang -->
+  <link rel="canonical" href="{{ base_url }}/?lang={{ lang }}" />
+  <link rel="alternate" hreflang="en" href="{{ base_url }}/?lang=en" />
+  <link rel="alternate" hreflang="ja" href="{{ base_url }}/?lang=ja" />
+  <link rel="alternate" hreflang="x-default" href="{{ base_url }}/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="{{ base_url }}/?lang={{ lang }}" />
+  <meta property="og:title" content="{% if lang == 'ja' %}家計 — LINEのAI家計簿{% else %}Kakei — AI Receipt Tracker for LINE{% endif %}" />
+  <meta property="og:description" content="{% if lang == 'ja' %}レシートを撮るだけで自動記録。{% else %}Snap a receipt. It logs itself.{% endif %}" />
+  <meta property="og:image" content="{{ base_url }}/static/landing/logo.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #06C755;
+      --green-dark: #04a344;
+      --green-light: #f0fdf4;
+      --green-mid: #dcfce7;
+      --text: #111827;
+      --sub: #6b7280;
+      --border: #e5e7eb;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      color: var(--text); background: #fff; line-height: 1.6;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.93);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      height: 60px; padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .nav-brand img { width: 32px; height: 32px; border-radius: 8px; display: block; }
+    .nav-brand span { font-size: 17px; font-weight: 700; }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .lang-toggle { display: flex; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .lang-toggle a {
+      padding: 5px 12px; font-size: 13px; font-weight: 600;
+      text-decoration: none; color: var(--sub); transition: background .15s, color .15s;
+    }
+    .lang-toggle a.active { background: var(--green); color: #fff; }
+    .btn-nav {
+      background: var(--green); color: #fff;
+      padding: 7px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; text-decoration: none;
+    }
+
+    /* HERO */
+    .hero {
+      padding: 80px 24px 72px;
+      background: linear-gradient(160deg, #f0fdf4 0%, #fff 55%);
+      text-align: center;
+    }
+    .hero-logo {
+      width: 88px; height: 88px; border-radius: 20px;
+      display: block; margin: 0 auto 28px;
+      box-shadow: 0 8px 28px rgba(6,199,85,0.28);
+    }
+    .hero h1 {
+      font-size: clamp(34px, 6vw, 58px);
+      font-weight: 800; line-height: 1.12; letter-spacing: -1.5px;
+      margin-bottom: 16px;
+    }
+    .hero h1 em { font-style: normal; color: var(--green); }
+    .hero p {
+      font-size: clamp(16px, 2.2vw, 19px);
+      color: var(--sub); max-width: 480px;
+      margin: 0 auto 36px;
+    }
+    .hero-btns { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .btn-primary {
+      background: var(--green); color: #fff;
+      padding: 14px 28px; border-radius: 12px;
+      font-size: 16px; font-weight: 700; text-decoration: none;
+      transition: background .15s, transform .1s;
+    }
+    .btn-primary:hover { background: var(--green-dark); transform: translateY(-1px); }
+    .btn-ghost {
+      border: 2px solid var(--border); color: var(--text);
+      padding: 14px 28px; border-radius: 12px;
+      font-size: 16px; font-weight: 600; text-decoration: none;
+      transition: border-color .15s;
+    }
+    .btn-ghost:hover { border-color: var(--green); }
+
+    /* SECTIONS */
+    section { padding: 72px 24px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--green); margin-bottom: 10px; }
+    .title { font-size: clamp(24px, 4vw, 34px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 10px; }
+    .sub { font-size: 16px; color: var(--sub); max-width: 460px; margin-bottom: 44px; }
+
+    /* FEATURES */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; }
+    .card {
+      background: var(--green-light); border: 1.5px solid var(--green-mid);
+      border-radius: 16px; padding: 26px 22px;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(6,199,85,.14); }
+    .card-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: var(--green); display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 14px;
+    }
+    .card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .card p { font-size: 14px; color: var(--sub); line-height: 1.5; }
+
+    /* HOW */
+    .how-bg { background: var(--green-light); }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 22px; }
+    .step { display: flex; gap: 14px; }
+    .step-n {
+      min-width: 38px; height: 38px; border-radius: 50%;
+      background: var(--green); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 800; flex-shrink: 0;
+    }
+    .step h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .step p { font-size: 13px; color: var(--sub); }
+
+    /* SCREENSHOT */
+    .split { display: flex; flex-wrap: wrap; gap: 52px; align-items: center; justify-content: center; }
+    .split-text { flex: 1; min-width: 240px; max-width: 380px; }
+    .split-text h2 { font-size: clamp(22px, 3.5vw, 30px); font-weight: 800; margin-bottom: 12px; }
+    .split-text p { font-size: 15px; color: var(--sub); margin-bottom: 24px; }
+    .phone {
+      width: 210px; flex-shrink: 0;
+      border-radius: 28px; overflow: hidden;
+      box-shadow: 0 20px 56px rgba(0,0,0,.14);
+      border: 6px solid #111;
+    }
+    .phone img { width: 100%; display: block; }
+
+    /* QR */
+    .qr-section {
+      background: linear-gradient(135deg, #06C755 0%, #04a344 100%);
+      text-align: center; color: #fff;
+    }
+    .qr-section .label { color: rgba(255,255,255,.65); }
+    .qr-section .title { color: #fff; }
+    .qr-section .sub { color: rgba(255,255,255,.8); margin: 0 auto 30px; }
+    .qr-box { display: inline-block; background: #fff; padding: 14px; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,.2); }
+    .qr-box img { width: 170px; height: 170px; display: block; }
+    .qr-hint { margin-top: 14px; font-size: 13px; color: rgba(255,255,255,.7); }
+
+    /* FOOTER */
+    footer { background: #0f172a; color: rgba(255,255,255,.55); padding: 36px 24px; text-align: center; }
+    .footer-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 18px; }
+    .footer-brand img { width: 28px; height: 28px; border-radius: 6px; display: block; }
+    .footer-brand span { font-size: 15px; font-weight: 700; color: #fff; }
+    .footer-links { display: flex; justify-content: center; gap: 22px; margin-bottom: 16px; }
+    .footer-links a {
+      color: rgba(255,255,255,.55); text-decoration: none;
+      font-size: 13px; display: flex; align-items: center; gap: 5px;
+      transition: color .15s;
+    }
+    .footer-links a:hover { color: var(--green); }
+    .footer-copy { font-size: 12px; }
+
+    @media (max-width: 580px) {
+      .btn-nav { display: none; }
+      .hero { padding: 52px 20px 48px; }
+      section { padding: 52px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">
+    <img src="/static/landing/logo.png" alt="Kakei" />
+    <span>家計 Kakei</span>
+  </a>
+  <div class="nav-right">
+    <div class="lang-toggle">
+      <a href="/?lang=en" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+      <a href="/?lang=ja" class="{{ 'active' if lang == 'ja' else '' }}">日本語</a>
+    </div>
+    <a class="btn-nav" href="https://lin.ee/OYuXM9N" target="_blank" rel="noopener">{% if lang == 'ja' %}友だち追加{% else %}Add on LINE{% endif %}</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <img class="hero-logo" src="/static/landing/logo.png" alt="Kakei logo" />
+  {% if lang == 'ja' %}
+    <h1>レシートを撮るだけ。<br><em>自動で記録。</em></h1>
+    <p>家計はLINEのAI家計簿です。写真を送るだけで金額・カテゴリ・支払い方法を自動読み取り。</p>
+  {% else %}
+    <h1>Snap a receipt.<br><em>It logs itself.</em></h1>
+    <p>Kakei is an AI budget tracker for LINE. Send a photo of any receipt — it reads the amount, category, and payment automatically.</p>
+  {% endif %}
+  <div class="hero-btns">
+    <a class="btn-primary" href="https://lin.ee/OYuXM9N" target="_blank" rel="noopener">{% if lang == 'ja' %}LINEで始める{% else %}Start on LINE{% endif %}</a>
+    <a class="btn-ghost" href="https://github.com/TemirlanSadykov/LINE-Budget-Tracker" target="_blank" rel="noopener">{% if lang == 'ja' %}GitHubを見る{% else %}View on GitHub{% endif %}</a>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section>
+  <div class="container">
+    <p class="label">{% if lang == 'ja' %}機能{% else %}Features{% endif %}</p>
+    <h2 class="title">{% if lang == 'ja' %}なぜKakeiなのか{% else %}Why Kakei?{% endif %}</h2>
+    <p class="sub">{% if lang == 'ja' %}手入力不要。AIが瞬時に処理します。{% else %}No manual typing. AI handles it instantly.{% endif %}</p>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">📷</div>
+        <h3>{% if lang == 'ja' %}AIレシート読み取り{% else %}AI Receipt Scan{% endif %}</h3>
+        <p>{% if lang == 'ja' %}Google Geminiが瞬時に解析。金額・カテゴリ・支払いを自動入力。{% else %}Google Gemini reads your receipt in seconds. Amount, category, payment — auto-filled.{% endif %}</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">✏️</div>
+        <h3>{% if lang == 'ja' %}手動入力{% else %}Manual Entry{% endif %}</h3>
+        <p>{% if lang == 'ja' %}レシートなしでも手動入力OK。メニューから素早く記録。{% else %}No receipt? Log any expense manually from the menu in seconds.{% endif %}</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>{% if lang == 'ja' %}月別統計{% else %}Monthly Stats{% endif %}</h3>
+        <p>{% if lang == 'ja' %}カテゴリ別月次集計をミニアプリで確認。支出の傾向を把握。{% else %}View monthly breakdowns by category in the built-in mini-app.{% endif %}</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌐</div>
+        <h3>{% if lang == 'ja' %}日英対応{% else %}Bilingual{% endif %}</h3>
+        <p>{% if lang == 'ja' %}英語・日本語に対応。一言で言語切り替え可能。{% else %}Full English and Japanese support. Switch anytime with one message.{% endif %}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW TO USE -->
+<section class="how-bg">
+  <div class="container">
+    <p class="label">{% if lang == 'ja' %}使い方{% else %}How it works{% endif %}</p>
+    <h2 class="title">{% if lang == 'ja' %}4ステップで完了{% else %}4 steps, that's it{% endif %}</h2>
+    <p class="sub">{% if lang == 'ja' %}LINEアプリから始められます。{% else %}Get started directly from LINE.{% endif %}</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">1</div>
+        <div>
+          <h4>{% if lang == 'ja' %}友だち追加{% else %}Add Kakei{% endif %}</h4>
+          <p>{% if lang == 'ja' %}QRコードをスキャンして友だち追加。{% else %}Scan the QR code to add Kakei on LINE.{% endif %}</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">2</div>
+        <div>
+          <h4>{% if lang == 'ja' %}レシートを送る{% else %}Send a receipt{% endif %}</h4>
+          <p>{% if lang == 'ja' %}写真を撮ってそのまま送信。AIが自動で読み取ります。{% else %}Take a photo and send it. AI reads it instantly.{% endif %}</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">3</div>
+        <div>
+          <h4>{% if lang == 'ja' %}確認して保存{% else %}Review & save{% endif %}</h4>
+          <p>{% if lang == 'ja' %}内容を確認して確定。編集も可能。{% else %}Check the details and confirm. Edit if needed.{% endif %}</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n">4</div>
+        <div>
+          <h4>{% if lang == 'ja' %}統計を確認{% else %}Track spending{% endif %}</h4>
+          <p>{% if lang == 'ja' %}メニュー →「マイプロフィール」で月次集計を確認。{% else %}Menu → "My Profile" for monthly breakdown.{% endif %}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOT -->
+<section>
+  <div class="container">
+    <div class="split">
+      <div class="split-text">
+        <p class="label">{% if lang == 'ja' %}デモ{% else %}See it in action{% endif %}</p>
+        <h2>{% if lang == 'ja' %}LINEの中で<br>すべて完結{% else %}Everything inside LINE{% endif %}</h2>
+        <p>{% if lang == 'ja' %}別アプリ不要。LINEのチャット画面から全操作できます。{% else %}No extra app needed. Everything works right inside LINE chat.{% endif %}</p>
+        <a class="btn-primary" href="https://lin.ee/OYuXM9N" target="_blank" rel="noopener">{% if lang == 'ja' %}今すぐ試す{% else %}Try it now{% endif %}</a>
+      </div>
+      <div class="phone">
+        <img src="/static/landing/screenshot.jpg" alt="Kakei bot in LINE" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QR -->
+<section class="qr-section">
+  <div class="container">
+    <p class="label">{% if lang == 'ja' %}今すぐ始める{% else %}Get started{% endif %}</p>
+    <h2 class="title">{% if lang == 'ja' %}LINEで友だち追加{% else %}Add Kakei on LINE{% endif %}</h2>
+    <p class="sub">{% if lang == 'ja' %}QRコードをスキャン。無料で使えます。{% else %}Scan the QR code with LINE. Free to use.{% endif %}</p>
+    <div class="qr-box">
+      <img src="/static/landing/qr.png" alt="Kakei QR code" />
+    </div>
+    <p class="qr-hint">{% if lang == 'ja' %}LINEアプリ → QRコードスキャン{% else %}LINE app → Scan QR code{% endif %}</p>
+    <a href="https://lin.ee/OYuXM9N" target="_blank" rel="noopener"
+       style="display:inline-block;margin-top:20px;background:rgba(255,255,255,0.15);
+              border:2px solid rgba(255,255,255,0.5);color:#fff;
+              padding:12px 28px;border-radius:10px;font-size:15px;font-weight:600;
+              text-decoration:none;transition:background .15s;">
+      {% if lang == 'ja' %}🔗 リンクから友だち追加{% else %}🔗 Add via link{% endif %}
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div style="max-width:900px;margin:0 auto;">
+    <div class="footer-brand">
+      <img src="/static/landing/logo.png" alt="Kakei" />
+      <span>家計 Kakei</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://www.linkedin.com/company/kakei-miniapp/" target="_blank" rel="noopener">
+        <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+        LinkedIn
+      </a>
+      <a href="https://github.com/TemirlanSadykov/LINE-Budget-Tracker" target="_blank" rel="noopener">
+        <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+        GitHub
+      </a>
+    </div>
+    <p class="footer-copy">© 2026 Kakei</p>
+  </div>
+</footer>
+
+</body>
+</html>
