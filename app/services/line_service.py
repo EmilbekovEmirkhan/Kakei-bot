@@ -879,8 +879,9 @@ async def push_receipt_review(user_id: str, state: dict, lang: str):
 def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     today = datetime.now()
     current_date = state.get("date")
+    is_future = bool(current_date and _is_future_date(current_date))
     items = []
-    if current_date:
+    if current_date and not is_future:
         items.append(quick_reply_postback_item(
             f"✅ {current_date}", make_receipt_postback_data("date_confirm"),
         ))
@@ -897,13 +898,14 @@ def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     })
     items.append(get_back_item("receipt", "review", lang))
     items.append(get_cancel_item(lang))
+    text = t("date_future_error", lang) if is_future else t(
+        "receipt_ask_date", lang,
+        label_scanned=t("label_scanned", lang),
+        date=current_date or t("label_unknown", lang),
+    )
     return {
         "type": "text",
-        "text": t(
-            "receipt_ask_date", lang,
-            label_scanned=t("label_scanned", lang),
-            date=current_date or t("label_unknown", lang),
-        ),
+        "text": text,
         "quickReply": {"items": items},
     }
 
@@ -1085,10 +1087,7 @@ async def handle_receipt_postback(
         if date_str and _is_future_date(date_str):
             state["step"] = "edit_date"
             await set_manual_entry_state(user_id, state)
-            await reply_raw_message(reply_token, [
-                {"type": "text", "text": t("date_future_error", lang)},
-                _make_ask_receipt_date_message(state, lang),
-            ])
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
         await save_transaction_from_state(reply_token, user_id, state, lang)
         return
@@ -1102,10 +1101,7 @@ async def handle_receipt_postback(
     if step == "date_confirm":
         current_date = state.get("date")
         if current_date and _is_future_date(current_date):
-            await reply_raw_message(reply_token, [
-                {"type": "text", "text": t("date_future_error", lang)},
-                _make_ask_receipt_date_message(state, lang),
-            ])
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
         state["step"] = "edit_category"
         await set_manual_entry_state(user_id, state)
@@ -1118,10 +1114,8 @@ async def handle_receipt_postback(
             await reply_message(reply_token, t("date_error", lang))
             return
         if _is_future_date(selected_date):
-            await reply_raw_message(reply_token, [
-                {"type": "text", "text": t("date_future_error", lang)},
-                _make_ask_receipt_date_message(state, lang),
-            ])
+            state["date"] = selected_date
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
         state.update({"date": selected_date, "step": "edit_category"})
         await set_manual_entry_state(user_id, state)
