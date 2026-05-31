@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import base64
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from urllib.parse import urlencode, parse_qs
 
 import httpx
@@ -183,6 +183,15 @@ def get_back_item(flow: str, to_step: str, lang: str = "ja") -> dict:
 
 
 # ── Lookup helpers ─────────────────────────────────────────────────────────
+
+def _is_date_out_of_bounds(date_str: str) -> bool:
+    """Return True if date_str is before 1920-01-01 or strictly after today."""
+    try:
+        parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return False
+
+    return parsed_date < date(1920, 1, 1) or parsed_date > datetime.now().date()
 
 def find_category(category_id: int) -> dict | None:
     return next((c for c in CATEGORIES if c["id"] == category_id), None)
@@ -518,8 +527,9 @@ async def start_manual_entry(reply_token: str, user_id: str, lang: str):
     await ask_date(reply_token, lang)
 
 
-async def ask_date(reply_token: str, lang: str):
-    message = {
+def _make_ask_date_message(lang: str) -> dict:
+    today = datetime.now()
+    return {
         "type": "text",
         "text": t("manual_ask_date", lang),
         "quickReply": {
@@ -531,13 +541,18 @@ async def ask_date(reply_token: str, lang: str):
                         "label": t("btn_select_date", lang),
                         "data":  make_manual_postback_data("date"),
                         "mode":  "date",
+                        "min":   "1920-01-01",
+                        "max":   today.strftime("%Y-%m-%d"),
                     },
                 },
                 get_cancel_item(lang),
             ]
         },
     }
-    await reply_raw_message(reply_token, [message])
+
+
+async def ask_date(reply_token: str, lang: str):
+    await reply_raw_message(reply_token, [_make_ask_date_message(lang)])
 
 
 async def ask_category(reply_token: str, date: str, lang: str):
@@ -705,6 +720,12 @@ async def handle_manual_postback(
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
             return
+        if _is_date_out_of_bounds(selected_date):
+            await reply_raw_message(reply_token, [
+                {"type": "text", "text": t("date_out_of_bounds_error", lang)},
+                _make_ask_date_message(lang),
+            ])
+            return
         state.update({"flow": "manual", "step": "category", "date": selected_date, "lang": lang})
         await set_manual_entry_state(user_id, state)
         await ask_category(reply_token, selected_date, lang)
@@ -856,10 +877,12 @@ async def push_receipt_review(user_id: str, state: dict, lang: str):
     await push_raw_message(user_id, [msg])
 
 
-async def ask_receipt_date(reply_token: str, state: dict, lang: str):
+def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
+    today = datetime.now()
     current_date = state.get("date")
+    is_out_of_bounds = bool(current_date and _is_date_out_of_bounds(current_date))
     items = []
-    if current_date:
+    if current_date and not is_out_of_bounds:
         items.append(quick_reply_postback_item(
             f"✅ {current_date}", make_receipt_postback_data("date_confirm"),
         ))
@@ -870,21 +893,26 @@ async def ask_receipt_date(reply_token: str, state: dict, lang: str):
             "label": t("btn_other_date", lang),
             "data":  make_receipt_postback_data("date_pick"),
             "mode":  "date",
+            "min":   "1920-01-01",
+            "max":   today.strftime("%Y-%m-%d"),
         },
     })
     items.append(get_back_item("receipt", "review", lang))
     items.append(get_cancel_item(lang))
-
-    message = {
+    text = t("date_out_of_bounds_error", lang) if is_out_of_bounds else t(
+        "receipt_ask_date", lang,
+        label_scanned=t("label_scanned", lang),
+        date=current_date or t("label_unknown", lang),
+    )
+    return {
         "type": "text",
-        "text": t(
-            "receipt_ask_date", lang,
-            label_scanned=t("label_scanned", lang),
-            date=current_date or t("label_unknown", lang),
-        ),
+        "text": text,
         "quickReply": {"items": items},
     }
-    await reply_raw_message(reply_token, [message])
+
+
+async def ask_receipt_date(reply_token: str, state: dict, lang: str):
+    await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
 
 
 async def ask_receipt_category(reply_token: str, state: dict, lang: str):
@@ -1056,6 +1084,12 @@ async def handle_receipt_postback(
     # ── Forward navigation ────────────────────────────────────────────────
 
     if step == "confirm_all":
+        date_str = state.get("date")
+        if date_str and _is_date_out_of_bounds(date_str):
+            state["step"] = "edit_date"
+            await set_manual_entry_state(user_id, state)
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
+            return
         await save_transaction_from_state(reply_token, user_id, state, lang)
         return
 
@@ -1066,6 +1100,10 @@ async def handle_receipt_postback(
         return
 
     if step == "date_confirm":
+        current_date = state.get("date")
+        if current_date and _is_date_out_of_bounds(current_date):
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
+            return
         state["step"] = "edit_category"
         await set_manual_entry_state(user_id, state)
         await ask_receipt_category(reply_token, state, lang)
@@ -1075,6 +1113,10 @@ async def handle_receipt_postback(
         selected_date = postback.get("params", {}).get("date")
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
+            return
+        if _is_date_out_of_bounds(selected_date):
+            state["date"] = selected_date
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
         state.update({"date": selected_date, "step": "edit_category"})
         await set_manual_entry_state(user_id, state)
