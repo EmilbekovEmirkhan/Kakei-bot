@@ -1,3 +1,5 @@
+import hashlib
+
 from app.db.redis import get_redis
 from fastapi import HTTPException
 
@@ -7,7 +9,8 @@ RATE_LIMIT_MAX    = 30       # requests per window per uid
 
 
 def _token_key(access_token: str) -> str:
-    return f"line_token:{access_token}"
+    hashed = hashlib.sha256(access_token.encode()).hexdigest()
+    return f"line_token:{hashed}"
 
 def _rate_key(uid: str) -> str:
     return f"rate:{uid}"
