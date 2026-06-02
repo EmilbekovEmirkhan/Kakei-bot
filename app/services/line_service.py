@@ -507,6 +507,9 @@ async def handle_postback(event: dict):
         await handle_receipt_postback(reply_token, user_id, data, postback, state, lang)
         return
 
+    lang = await get_user_language(user_id)
+    await reply_message(reply_token, t("invalid_action", lang))
+
 
 async def handle_lang_postback(reply_token: str, user_id: str, data: dict):
     lang = data.get("lang", "ja")
@@ -726,6 +729,8 @@ async def handle_manual_postback(
                 _make_ask_date_message(lang),
             ])
             return
+        if state is None:
+            state = {}
         state.update({"flow": "manual", "step": "category", "date": selected_date, "lang": lang})
         await set_manual_entry_state(user_id, state)
         await ask_category(reply_token, selected_date, lang)
@@ -791,6 +796,11 @@ async def handle_manual_postback(
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
+        if state.get("amount") is None:
+            state["step"] = "amount"
+            await set_manual_entry_state(user_id, state)
+            await ask_amount(reply_token, state, lang)
+            return
         await save_transaction_from_state(reply_token, user_id, state, lang)
         return
 
@@ -809,7 +819,7 @@ async def handle_manual_text_input(
 
     if step == "amount":
         amount_text = text.replace(",", "").replace("円", "").replace("¥", "").strip()
-        if not amount_text.isdigit():
+        if not amount_text.isdigit() or int(amount_text) <= 0:
             await reply_message(reply_token, t("invalid_amount", lang))
             return
         state.update({"amount": int(amount_text), "step": "note"})
@@ -858,7 +868,10 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
         ),
         "quickReply": {
             "items": [
-                quick_reply_postback_item(t("btn_confirm", lang),  make_receipt_postback_data("confirm_all")),
+                *(
+                    [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"))]
+                    if state.get("amount") is not None else []
+                ),
                 quick_reply_postback_item(t("btn_edit", lang),     make_receipt_postback_data("edit")),
                 quick_reply_postback_item(t("btn_add_note", lang), make_receipt_postback_data("note_add"), input_option="openKeyboard"),
                 get_cancel_item(lang),
@@ -1090,6 +1103,11 @@ async def handle_receipt_postback(
             await set_manual_entry_state(user_id, state)
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
+        if state.get("amount") is None:
+            state["step"] = "edit_amount"
+            await set_manual_entry_state(user_id, state)
+            await ask_receipt_amount(reply_token, state, lang)
+            return
         await save_transaction_from_state(reply_token, user_id, state, lang)
         return
 
@@ -1201,6 +1219,17 @@ async def handle_receipt_postback(
         return
 
     if step == "final_confirm":
+        date_str = state.get("date")
+        if date_str and _is_date_out_of_bounds(date_str):
+            state["step"] = "edit_date"
+            await set_manual_entry_state(user_id, state)
+            await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
+            return
+        if state.get("amount") is None:
+            state["step"] = "edit_amount"
+            await set_manual_entry_state(user_id, state)
+            await ask_receipt_amount(reply_token, state, lang)
+            return
         await save_transaction_from_state(reply_token, user_id, state, lang)
         return
 
@@ -1219,7 +1248,7 @@ async def handle_receipt_text_input(
 
     if step == "edit_amount_input":
         amount_text = text.replace(",", "").replace("円", "").replace("¥", "").strip()
-        if not amount_text.isdigit():
+        if not amount_text.isdigit() or int(amount_text) <= 0:
             await reply_message(reply_token, t("invalid_amount", lang))
             return
         state.update({"amount": int(amount_text), "step": "edit_note"})

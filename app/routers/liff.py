@@ -45,7 +45,7 @@ async def api_stats(request: Request, uid: str = Depends(get_current_uid)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid query params")
 
-    if not (2000 <= year <= now.year + 1):
+    if not (1920 <= year <= now.year):
         raise HTTPException(status_code=400, detail="Invalid year")
     if not (1 <= month <= 12):
         raise HTTPException(status_code=400, detail="Invalid month")

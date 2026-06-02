@@ -44,6 +44,7 @@ async def get_monthly_stats(
     async with pool.acquire() as conn:
         category_rows = await conn.fetch("""
             SELECT
+                c.id    AS category_id,
                 c.name  AS category_name,
                 c.icon  AS category_icon,
                 COALESCE(SUM(t.amount), 0) AS subtotal,
@@ -103,6 +104,7 @@ async def get_monthly_stats(
         "count": count,
         "by_category": [
             {
+                "id": row["category_id"],
                 "name": row["category_name"] or "その他",
                 "icon": row["category_icon"] or "📦",
                 "subtotal": int(row["subtotal"]),
