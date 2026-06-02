@@ -1,6 +1,5 @@
 import asyncio
 import json
-import traceback
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -12,10 +11,7 @@ sem = asyncio.Semaphore(10)
 
 async def bounded(e):
     async with sem:
-        try:
-            await handle_event(e)
-        except Exception:
-            traceback.print_exc()
+        await handle_event(e)
 
 @router.post("/webhook")
 async def webhook(request: Request):
@@ -25,6 +21,6 @@ async def webhook(request: Request):
 
     events = json.loads(body).get("events", [])
     if events:
-        await asyncio.gather(*[bounded(e) for e in events], return_exceptions=False)
+        await asyncio.gather(*[bounded(e) for e in events])
 
     return JSONResponse({"status": "ok"})

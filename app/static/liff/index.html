@@ -466,20 +466,32 @@
     let paths = "";
     let sliceIdx = 0;
 
-    cats.forEach((cat, idx) => {
-      if (!cat.subtotal) return;
-      const sweep = (cat.subtotal / total) * 2 * Math.PI;
-      const end   = angle + sweep;
-      const large = sweep > Math.PI ? 1 : 0;
-      const color = catColor(cat, idx);
-      const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
-      const x2 = cx + R * Math.cos(end),   y2 = cy + R * Math.sin(end);
-      const x3 = cx + r * Math.cos(end),   y3 = cy + r * Math.sin(end);
-      const x4 = cx + r * Math.cos(angle), y4 = cy + r * Math.sin(angle);
-      paths += `<path id="dslice-${sliceIdx}" d="M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${large},0 ${x4},${y4} Z" fill="${color}" stroke="#fff" stroke-width="2" style="cursor:pointer;touch-action:manipulation" onclick="highlightSlice(${sliceIdx})"/>`;
-      angle = end;
-      sliceIdx++;
-    });
+    const activeCatsForSlice = cats.filter(c => c.subtotal > 0);
+
+    if (activeCatsForSlice.length === 1) {
+      // Full circle — SVG arc can't draw 360°, use two circles instead
+      const cat   = activeCatsForSlice[0];
+      const color = catColor(cat, cats.indexOf(cat));
+      paths = `
+        <circle cx="${cx}" cy="${cy}" r="${R}" fill="${color}" id="dslice-0" style="cursor:pointer;touch-action:manipulation" onclick="highlightSlice(0)"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>`;
+      sliceIdx = 1;
+    } else {
+      cats.forEach((cat, idx) => {
+        if (!cat.subtotal) return;
+        const sweep = (cat.subtotal / total) * 2 * Math.PI;
+        const end   = angle + sweep;
+        const large = sweep > Math.PI ? 1 : 0;
+        const color = catColor(cat, idx);
+        const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+        const x2 = cx + R * Math.cos(end),   y2 = cy + R * Math.sin(end);
+        const x3 = cx + r * Math.cos(end),   y3 = cy + r * Math.sin(end);
+        const x4 = cx + r * Math.cos(angle), y4 = cy + r * Math.sin(angle);
+        paths += `<path id="dslice-${sliceIdx}" d="M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${large},0 ${x4},${y4} Z" fill="${color}" stroke="#fff" stroke-width="2" style="cursor:pointer;touch-action:manipulation" onclick="highlightSlice(${sliceIdx})"/>`;
+        angle = end;
+        sliceIdx++;
+      });
+    }
 
     const activeCats = cats.filter(c => c.subtotal > 0);
     const legendPcts = distributePercents(activeCats, total);

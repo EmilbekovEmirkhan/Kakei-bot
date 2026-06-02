@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS users (
     uid             VARCHAR(33) PRIMARY KEY,
     name            TEXT,
     language_code   VARCHAR(10),
+    currency_code   VARCHAR(3) DEFAULT 'JPY',
+    timezone        VARCHAR(50) DEFAULT 'Asia/Tokyo',
     blocked_at      TIMESTAMP NULL,
     created_at      TIMESTAMP DEFAULT NOW()
 );
