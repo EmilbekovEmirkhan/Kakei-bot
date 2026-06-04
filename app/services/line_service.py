@@ -184,14 +184,27 @@ def get_back_item(flow: str, to_step: str, lang: str = "ja") -> dict:
 
 # ── Lookup helpers ─────────────────────────────────────────────────────────
 
-def _is_date_out_of_bounds(date_str: str) -> bool:
-    """Return True if date_str is before 1920-01-01 or strictly after today."""
+def _is_date_nonexistent(date_str: str) -> bool:
+    """Return True if date_str is not a real calendar date (e.g. Feb 29 on a non-leap year)."""
     try:
-        parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-    except ValueError:
+        datetime.strptime(date_str, "%Y-%m-%d")
         return False
+    except ValueError:
+        return True
 
+def _is_date_out_of_bounds(date_str: str) -> bool:
+    """Return True if date_str is before 1920-01-01 or strictly after today.
+    Caller must ensure date_str is a valid calendar date (use _is_date_nonexistent first)."""
+    parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     return parsed_date < date(1920, 1, 1) or parsed_date > datetime.now().date()
+
+def _date_error_key(date_str: str) -> str | None:
+    """Return the i18n key for the date error, or None if the date is valid."""
+    if _is_date_nonexistent(date_str):
+        return "date_nonexistent_error"
+    if _is_date_out_of_bounds(date_str):
+        return "date_out_of_bounds_error"
+    return None
 
 def find_category(category_id: int) -> dict | None:
     return next((c for c in CATEGORIES if c["id"] == category_id), None)
@@ -723,9 +736,10 @@ async def handle_manual_postback(
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
             return
-        if _is_date_out_of_bounds(selected_date):
+        date_err = _date_error_key(selected_date)
+        if date_err:
             await reply_raw_message(reply_token, [
-                {"type": "text", "text": t("date_out_of_bounds_error", lang)},
+                {"type": "text", "text": t(date_err, lang)},
                 _make_ask_date_message(lang),
             ])
             return
@@ -870,7 +884,7 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
             "items": [
                 *(
                     [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"))]
-                    if state.get("amount") is not None else []
+                    if state.get("amount") is not None and not _date_error_key(state.get("date") or "") else []
                 ),
                 quick_reply_postback_item(t("btn_edit", lang),     make_receipt_postback_data("edit")),
                 quick_reply_postback_item(t("btn_add_note", lang), make_receipt_postback_data("note_add"), input_option="openKeyboard"),
@@ -886,16 +900,19 @@ async def ask_receipt_review(reply_token: str, state: dict, lang: str):
 
 
 async def push_receipt_review(user_id: str, state: dict, lang: str):
-    msg = _build_receipt_review_message(state, lang)
-    await push_raw_message(user_id, [msg])
+    messages = [_build_receipt_review_message(state, lang)]
+    date_str = state.get("date")
+    if date_str and _date_error_key(date_str):
+        messages.append(_make_ask_receipt_date_message(state, lang))
+    await push_raw_message(user_id, messages)
 
 
 def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     today = datetime.now()
     current_date = state.get("date")
-    is_out_of_bounds = bool(current_date and _is_date_out_of_bounds(current_date))
+    error_key = _date_error_key(current_date) if current_date else None
     items = []
-    if current_date and not is_out_of_bounds:
+    if current_date and not error_key:
         items.append(quick_reply_postback_item(
             f"✅ {current_date}", make_receipt_postback_data("date_confirm"),
         ))
@@ -912,7 +929,7 @@ def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     })
     items.append(get_back_item("receipt", "review", lang))
     items.append(get_cancel_item(lang))
-    text = t("date_out_of_bounds_error", lang) if is_out_of_bounds else t(
+    text = t(error_key, lang) if error_key else t(
         "receipt_ask_date", lang,
         label_scanned=t("label_scanned", lang),
         date=current_date or t("label_unknown", lang),
@@ -1098,7 +1115,7 @@ async def handle_receipt_postback(
 
     if step == "confirm_all":
         date_str = state.get("date")
-        if date_str and _is_date_out_of_bounds(date_str):
+        if date_str and _date_error_key(date_str):
             state["step"] = "edit_date"
             await set_manual_entry_state(user_id, state)
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
@@ -1119,7 +1136,7 @@ async def handle_receipt_postback(
 
     if step == "date_confirm":
         current_date = state.get("date")
-        if current_date and _is_date_out_of_bounds(current_date):
+        if current_date and _date_error_key(current_date):
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
         state["step"] = "edit_category"
@@ -1132,7 +1149,7 @@ async def handle_receipt_postback(
         if not selected_date:
             await reply_message(reply_token, t("date_error", lang))
             return
-        if _is_date_out_of_bounds(selected_date):
+        if _date_error_key(selected_date):
             state["date"] = selected_date
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
@@ -1220,7 +1237,7 @@ async def handle_receipt_postback(
 
     if step == "final_confirm":
         date_str = state.get("date")
-        if date_str and _is_date_out_of_bounds(date_str):
+        if date_str and _date_error_key(date_str):
             state["step"] = "edit_date"
             await set_manual_entry_state(user_id, state)
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
