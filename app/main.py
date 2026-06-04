@@ -1,12 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from app.db.init_db import init_db
 from app.db.connection import close_pool
 from app.services.line_service import init_http_client, close_http_client
 from app.routers.webhook import router as webhook_router
 from app.routers.liff import router as liff_router
-from app.routers.landing import router as landing_router
 from app.db.redis import init_redis, close_redis
 
 @asynccontextmanager
@@ -20,7 +18,5 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.include_router(landing_router)
 app.include_router(webhook_router)
 app.include_router(liff_router)
