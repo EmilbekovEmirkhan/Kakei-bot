@@ -189,7 +189,7 @@ def _is_date_out_of_bounds(date_str: str) -> bool:
     try:
         parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        return True
+        return False
 
     return parsed_date < date(1920, 1, 1) or parsed_date > datetime.now().date()
 
