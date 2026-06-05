@@ -902,7 +902,7 @@ async def ask_receipt_review(reply_token: str, state: dict, lang: str):
 async def push_receipt_review(user_id: str, state: dict, lang: str):
     messages = [_build_receipt_review_message(state, lang)]
     date_str = state.get("date")
-    if date_str and _date_error_key(date_str):
+    if not date_str or _date_error_key(date_str):
         messages.append(_make_ask_receipt_date_message(state, lang))
     await push_raw_message(user_id, messages)
 
@@ -929,11 +929,15 @@ def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     })
     items.append(get_back_item("receipt", "review", lang))
     items.append(get_cancel_item(lang))
-    text = t(error_key, lang) if error_key else t(
-        "receipt_ask_date", lang,
-        label_scanned=t("label_scanned", lang),
-        date=current_date or t("label_unknown", lang),
-    )
+    if not current_date:
+        text = t("date_not_detected_error", lang)
+    elif error_key:
+        text = t(error_key, lang)
+    else:
+        text = t("receipt_ask_date", lang,
+            label_scanned=t("label_scanned", lang),
+            date=current_date,
+        )
     return {
         "type": "text",
         "text": text,
