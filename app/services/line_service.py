@@ -669,7 +669,7 @@ async def ask_confirm(reply_token: str, state: dict, lang: str):
         ),
         "quickReply": {
             "items": [
-                quick_reply_postback_item(t("btn_confirm", lang), make_manual_postback_data("confirm")),
+                quick_reply_postback_item(t("btn_confirm", lang), make_manual_postback_data("confirm"), input_option="openRichMenu"),
                 quick_reply_postback_item(t("btn_restart", lang), make_manual_postback_data("restart")),
                 get_back_item("manual", "note", lang),
                 get_cancel_item(lang),
@@ -883,7 +883,7 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
         "quickReply": {
             "items": [
                 *(
-                    [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"))]
+                    [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"), input_option="openRichMenu")]
                     if state.get("amount") is not None and not _date_error_key(state.get("date") or "") else []
                 ),
                 quick_reply_postback_item(t("btn_edit", lang),     make_receipt_postback_data("edit")),
@@ -1054,7 +1054,7 @@ async def ask_receipt_final_confirm(reply_token: str, state: dict, lang: str):
         ),
         "quickReply": {
             "items": [
-                quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("final_confirm")),
+                quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("final_confirm"), input_option="openRichMenu"),
                 quick_reply_postback_item(t("btn_restart", lang), make_receipt_postback_data("restart")),
                 get_back_item("receipt", "note", lang),
                 get_cancel_item(lang),

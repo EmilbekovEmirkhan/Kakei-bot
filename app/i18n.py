@@ -85,7 +85,8 @@ _S: dict[str, dict[str, str]] = {
             "   メニュー →「マイプロフィール」\n"
             "   月別・カテゴリ別で集計表示！\n\n"
             "━━━━━━━━━━━━\n"
-            "💡 言語変更:「言語変更」と送信"
+            "💡 言語変更:「言語変更」と送信\n\n"
+            "📌 メニューが表示されない場合は、一度このチャットを閉じて、もう一度開いてください。"
         ),
 
         # ── Rate limiting ───────────────────────────────────
@@ -173,7 +174,8 @@ _S: dict[str, dict[str, str]] = {
             "   Menu → \"My Profile\"\n"
             "   Monthly breakdown by category!\n\n"
             "━━━━━━━━━━━━\n"
-            "💡 Change language: type \"change language\""
+            "💡 Change language: type \"change language\"\n\n"
+            "📌 If you cannot see the menu, please leave this chat and open it again."
         ),
 
         # ── Rate limiting ───────────────────────────────────
