@@ -111,7 +111,7 @@ def _safe_int(value) -> int | None:
 
     return None
 
-def _normalize_store_name(value) -> str:
+def _normalize_store_name(value) -> str | None:
     if not isinstance(value, str):
         return None
 
