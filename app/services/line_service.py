@@ -754,7 +754,7 @@ async def handle_manual_postback(
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
-        category_id = int(data["category_id"])
+        category_id = int(data.get("category_id"))
         category    = find_category(category_id)
         if not category:
             await reply_message(reply_token, t("category_error", lang))
@@ -773,7 +773,7 @@ async def handle_manual_postback(
         if not state:
             await reply_message(reply_token, t("session_expired", lang))
             return
-        payment_method_id = int(data["payment_method_id"])
+        payment_method_id = int(data.get("payment_method_id"))
         payment           = find_payment_method(payment_method_id)
         if not payment:
             await reply_message(reply_token, t("payment_error", lang))
@@ -1165,7 +1165,7 @@ async def handle_receipt_postback(
         return
 
     if step == "category_pick":
-        category_id = int(data["category_id"])
+        category_id = int(data.get("category_id"))
         category    = find_category(category_id)
         if not category:
             await reply_message(reply_token, t("category_error", lang))
@@ -1187,7 +1187,7 @@ async def handle_receipt_postback(
         return
 
     if step == "payment_pick":
-        payment_id = int(data["payment_method_id"])
+        payment_id = int(data.get("payment_method_id"))
         payment    = find_payment_method(payment_id)
         if not payment:
             await reply_message(reply_token, t("payment_error", lang))
