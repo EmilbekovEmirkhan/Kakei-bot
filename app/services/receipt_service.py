@@ -52,6 +52,8 @@ Visa/Mastercard/JCB/AMEX/card/クレジット = 2.
 現金/お預り/お釣り = 1.
 """
 
+TIMEOUT_MS = 90000
+
 _client: genai.Client | None = None
 
 
@@ -62,7 +64,7 @@ def _get_client() -> genai.Client:
         if not GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY is not set")
 
-        _client = genai.Client(api_key=GEMINI_API_KEY)
+        _client = genai.Client(api_key=GEMINI_API_KEY, http_options={"timeout": TIMEOUT_MS})
 
     return _client
 
