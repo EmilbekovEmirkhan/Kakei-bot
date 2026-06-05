@@ -182,10 +182,12 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
     if not isinstance(data, dict):
         raise ValueError(f"Gemini returned non-object JSON: {data}")
 
+    raw_amount = _safe_int(data.get("a"))
+
     return {
         "store_name": _normalize_store_name(data.get("s")),
         "category_id": _normalize_category_id(data.get("c")),
-        "amount": _safe_int(data.get("a")),
+        "amount": raw_amount if raw_amount is not None and raw_amount > 0 else None,
         "date": _normalize_date(data.get("d")),
         "payment_method_id": _normalize_payment_method_id(data.get("p")),
     }
