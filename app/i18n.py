@@ -44,8 +44,9 @@ _S: dict[str, dict[str, str]] = {
         "receipt_ask_date":     "📅 日付を確認してください\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 カテゴリを確認してください\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 支払方法を確認してください\n\n{label_scanned}: {payment}",
-        "receipt_ask_amount":   "💴 金額を確認してください\n\n{label_scanned}: {amount}",
-        "receipt_ask_note":     "📝 メモを追加しますか？",
+        "receipt_ask_amount":          "💴 金額を確認してください\n\n{label_scanned}: {amount}",
+        "receipt_amount_not_detected": "❌ レシートから金額を読み取れませんでした。\n正しい金額を入力してください。",
+        "receipt_ask_note":            "📝 メモを追加しますか？",
         "receipt_ask_confirm":  "以下の内容で登録しますか？\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}",
 
         # ── Input prompts ───────────────────────────────────
@@ -134,8 +135,9 @@ _S: dict[str, dict[str, str]] = {
         "receipt_ask_date":     "📅 Confirm the date\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 Confirm the category\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 Confirm payment method\n\n{label_scanned}: {payment}",
-        "receipt_ask_amount":   "💴 Confirm the amount\n\n{label_scanned}: {amount}",
-        "receipt_ask_note":     "📝 Would you like to add a note?",
+        "receipt_ask_amount":          "💴 Confirm the amount\n\n{label_scanned}: {amount}",
+        "receipt_amount_not_detected": "❌ We couldn't read the amount from the receipt.\nPlease enter the correct amount.",
+        "receipt_ask_note":            "📝 Would you like to add a note?",
         "receipt_ask_confirm":  "Save this entry?\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}",
 
         # ── Input prompts ───────────────────────────────────

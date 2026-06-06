@@ -858,7 +858,9 @@ async def handle_manual_text_input(
 # ── Receipt flow ───────────────────────────────────────────────────────────
 
 def _build_receipt_review_message(state: dict, lang: str) -> dict:
-    date_display     = state.get("date") or t("label_unknown", lang)
+    """Build the parsed receipt info message (no quickReply — attached by _build_receipt_review_messages)."""
+    date_str         = state.get("date")
+    date_display     = date_str or t("label_unknown", lang)
     amount_display   = f"¥{state['amount']:,}" if state.get("amount") is not None else t("label_unknown", lang)
     category_display = (
         f"{state['category_icon']} {state['category_name']}"
@@ -880,37 +882,55 @@ def _build_receipt_review_message(state: dict, lang: str) -> dict:
             amount=amount_display,
             note=note_display,
         ),
-        "quickReply": {
-            "items": [
-                *(
-                    [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"), input_option="openRichMenu")]
-                    if state.get("amount") is not None and not _date_error_key(state.get("date") or "") else []
-                ),
-                quick_reply_postback_item(t("btn_edit", lang),     make_receipt_postback_data("edit")),
-                quick_reply_postback_item(t("btn_add_note", lang), make_receipt_postback_data("note_add"), input_option="openKeyboard"),
-                get_cancel_item(lang),
-            ]
-        },
     }
 
 
+def _build_receipt_review_messages(state: dict, lang: str) -> list[dict]:
+    """Return all messages for the receipt review screen.
+    Parsed info comes first, then any error notices as separate plain text
+    messages. The quickReply buttons are attached to the last message."""
+    date_str       = state.get("date")
+    date_error_key = _date_error_key(date_str) if date_str else "date_nonexistent_error"
+    amount_ok      = (state.get("amount") or 0) > 0
+    date_ok        = not date_error_key
+
+    quick_reply = {
+        "items": [
+            *(
+                [quick_reply_postback_item(t("btn_confirm", lang), make_receipt_postback_data("confirm_all"), input_option="openRichMenu")]
+                if amount_ok and date_ok else []
+            ),
+            quick_reply_postback_item(t("btn_edit", lang), make_receipt_postback_data("edit")),
+            quick_reply_postback_item(t("btn_add_note", lang), make_receipt_postback_data("note_add"), input_option="openKeyboard"),
+            get_cancel_item(lang),
+        ]
+    }
+
+    messages = [_build_receipt_review_message(state, lang)]
+
+    if date_error_key:
+        messages.append({"type": "text", "text": t(date_error_key, lang)})
+    if not amount_ok:
+        messages.append({"type": "text", "text": t("receipt_amount_not_detected", lang)})
+
+    # Attach quick reply to the last message so buttons always appear
+    messages[-1]["quickReply"] = quick_reply
+
+    return messages
+
+
 async def ask_receipt_review(reply_token: str, state: dict, lang: str):
-    msg = _build_receipt_review_message(state, lang)
-    await reply_raw_message(reply_token, [msg])
+    await reply_raw_message(reply_token, _build_receipt_review_messages(state, lang))
 
 
 async def push_receipt_review(user_id: str, state: dict, lang: str):
-    messages = [_build_receipt_review_message(state, lang)]
-    date_str = state.get("date")
-    if not date_str or _date_error_key(date_str):
-        messages.append(_make_ask_receipt_date_message(state, lang))
-    await push_raw_message(user_id, messages)
+    await push_raw_message(user_id, _build_receipt_review_messages(state, lang))
 
 
 def _make_ask_receipt_date_message(state: dict, lang: str) -> dict:
     today = datetime.now()
     current_date = state.get("date")
-    error_key = _date_error_key(current_date) if current_date else None
+    error_key = _date_error_key(current_date) if current_date else "date_nonexistent_error"
     items = []
     if current_date and not error_key:
         items.append(quick_reply_postback_item(
@@ -1018,7 +1038,7 @@ async def ask_receipt_payment(reply_token: str, state: dict, lang: str):
 async def ask_receipt_amount(reply_token: str, state: dict, lang: str):
     current_amount = state.get("amount")
     items          = []
-    if current_amount is not None:
+    if current_amount is not None and current_amount > 0:
         items.append(quick_reply_postback_item(
             f"✅ ¥{current_amount:,}", make_receipt_postback_data("amount_confirm"),
         ))
@@ -1030,13 +1050,13 @@ async def ask_receipt_amount(reply_token: str, state: dict, lang: str):
     items.append(get_back_item("receipt", "payment", lang))
     items.append(get_cancel_item(lang))
 
-    amount_display = f"¥{current_amount:,}" if current_amount is not None else t("label_unknown", lang)
+    amount_display = f"¥{current_amount:,}" if current_amount is not None and current_amount > 0 else t("label_unknown", lang)
     message = {
         "type": "text",
-        "text": t(
-            "receipt_ask_amount", lang,
-            label_scanned=t("label_scanned", lang),
-            amount=amount_display,
+        "text": (
+            t("receipt_amount_not_detected", lang)
+            if not current_amount or current_amount <= 0
+            else t("receipt_ask_amount", lang, label_scanned=t("label_scanned", lang), amount=amount_display)
         ),
         "quickReply": {"items": items},
     }
@@ -1124,7 +1144,7 @@ async def handle_receipt_postback(
             await set_manual_entry_state(user_id, state)
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
-        if state.get("amount") is None:
+        if not state.get("amount") or state["amount"] <= 0:
             state["step"] = "edit_amount"
             await set_manual_entry_state(user_id, state)
             await ask_receipt_amount(reply_token, state, lang)
@@ -1207,6 +1227,11 @@ async def handle_receipt_postback(
         return
 
     if step == "amount_confirm":
+        if not state.get("amount") or state["amount"] <= 0:
+            state["step"] = "edit_amount"
+            await set_manual_entry_state(user_id, state)
+            await ask_receipt_amount(reply_token, state, lang)
+            return
         state["step"] = "edit_note"
         await set_manual_entry_state(user_id, state)
         await ask_note_option(reply_token, lang, flow="receipt")
@@ -1246,7 +1271,7 @@ async def handle_receipt_postback(
             await set_manual_entry_state(user_id, state)
             await reply_raw_message(reply_token, [_make_ask_receipt_date_message(state, lang)])
             return
-        if state.get("amount") is None:
+        if not state.get("amount") or state["amount"] <= 0:
             state["step"] = "edit_amount"
             await set_manual_entry_state(user_id, state)
             await ask_receipt_amount(reply_token, state, lang)
