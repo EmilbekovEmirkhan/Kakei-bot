@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.db.init_db import init_db
-from app.db.connection import close_pool
+from app.db.connection import init_pool, close_pool
 from app.services.line_service import init_http_client, close_http_client
 from app.routers.webhook import router as webhook_router
 from app.routers.liff import router as liff_router
@@ -9,6 +9,7 @@ from app.db.redis import init_redis, close_redis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_pool()
     await init_db()
     await init_http_client()
     await init_redis()

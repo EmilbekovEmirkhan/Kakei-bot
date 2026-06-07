@@ -55,7 +55,60 @@
       transition: background .15s;
     }
     .month-nav button:hover { background: var(--green-bg); }
-    .month-nav .label { font-size: 15px; font-weight: 600; min-width: 120px; text-align: center; }
+    .month-nav .label { font-size: 15px; font-weight: 600; min-width: 120px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .year-btn {
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      font-size: 15px; font-weight: 700;
+      color: var(--text);
+      display: inline-flex; align-items: center; gap: 3px;
+      user-select: none;
+      border-bottom: 1.5px dashed var(--sub);
+      padding-bottom: 1px;
+    }
+    .year-btn .yr-arrow { font-size: 9px; opacity: .5; transition: transform .2s; }
+    .year-btn.open .yr-arrow { transform: rotate(180deg); }
+
+    /* ── Year picker bottom sheet ── */
+    .year-picker-overlay {
+      display: none; position: fixed; inset: 0; z-index: 99;
+      background: rgba(0,0,0,.35);
+    }
+    .year-picker-overlay.open { display: block; }
+    #year-picker, #month-picker {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 100; background: #fff;
+      border-radius: 18px 18px 0 0;
+      padding: 0 0 env(safe-area-inset-bottom, 12px);
+      box-shadow: 0 -4px 24px rgba(0,0,0,.12);
+      transform: translateY(100%);
+      transition: transform .25s ease;
+    }
+    #year-picker.open, #month-picker.open { display: block; transform: translateY(0); }
+    .year-sheet-handle {
+      width: 36px; height: 4px; border-radius: 2px;
+      background: var(--border); margin: 12px auto 4px;
+    }
+    .year-sheet-title {
+      text-align: center; font-size: 13px; color: var(--sub);
+      padding: 4px 16px 10px; font-weight: 500;
+    }
+    .year-sheet-list {
+      max-height: 50vh; overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 12px 12px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .year-option {
+      padding: 13px 16px; border-radius: 10px;
+      font-size: 16px; cursor: pointer; text-align: center;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      color: var(--text); transition: background .1s;
+    }
+    .year-option:active { background: var(--green-bg); }
+    .year-option.selected { font-weight: 800; color: var(--green-dark); }
 
     /* ── Filter bar ── */
     .filter-bar {
@@ -163,7 +216,37 @@
     .cat-pct-text { font-size: 11px; color: var(--sub); }
 
     .bar-track { background: var(--green-bg); border-radius: 99px; height: 6px; overflow: hidden; margin-bottom: 2px; }
-    .bar-fill  { background: var(--green); height: 100%; border-radius: 99px; transition: width .5s ease; }
+    .bar-fill  { height: 100%; border-radius: 99px; transition: width .5s ease; }
+
+    /* ── Donut chart ── */
+    .donut-wrap {
+      display: flex; align-items: center; gap: 16px;
+      padding: 8px 0 16px;
+    }
+    .donut-legend {
+      display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; white-space: nowrap; overflow: hidden;
+    }
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .legend-name { flex: 1; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+    .legend-pct  { font-weight: 700; color: var(--sub); font-size: 11px; flex-shrink: 0; }
+    .legend-item {
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      border-radius: 6px;
+      padding: 2px 4px;
+      transition: background .15s;
+    }
+    .legend-item.active { background: rgba(0,0,0,.06); }
+    .donut-svg path { transition: opacity .2s; outline: none; -webkit-tap-highlight-color: transparent; }
+    .donut-svg.has-selection path { opacity: 0.35; }
+    .donut-svg.has-selection path.selected { opacity: 1; }
 
     /* ── Transaction list ── */
     .txn-list {
@@ -208,6 +291,28 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty { color: var(--sub); font-size: 14px; text-align: center; padding: 16px 0; }
+
+    .txn-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .receipt-btn {
+      background: var(--green-bg);
+      border: 1.5px solid var(--green);
+      color: var(--green-dark);
+      border-radius: 6px;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .receipt-btn:active {
+      background: var(--green);
+      color: #fff;
+      transform: scale(.92);
+    }
   </style>
 </head>
 <body>
@@ -217,11 +322,24 @@
   <img id="avatar" class="avatar" src="" alt="" style="display:none" />
 </header>
 
-<div class="month-nav">
+<div class="month-nav" style="position:relative">
   <button onclick="changeMonth(-1)">‹</button>
-  <div class="label" id="month-label">…</div>
+  <div class="label" id="month-label">
+    <span id="year-btn" class="year-btn" ontouchend="event.preventDefault();toggleYearPicker()" onclick="toggleYearPicker()">
+      <span id="year-display">…</span>
+      <span class="yr-arrow">▼</span>
+    </span>
+    <span id="month-btn" class="year-btn" ontouchend="event.preventDefault();toggleMonthPicker()" onclick="toggleMonthPicker()">
+      <span id="month-display">…</span>
+      <span class="yr-arrow">▼</span>
+    </span>
+  </div>
   <button id="next-btn" onclick="changeMonth(+1)">›</button>
+  <div id="year-picker"></div>
+  <div id="month-picker"></div>
 </div>
+<div class="year-picker-overlay" id="year-overlay" onclick="closeYearPicker()"></div>
+<div class="year-picker-overlay" id="month-overlay" onclick="closeMonthPicker()"></div>
 
 <div class="filter-bar" id="filter-bar">
   <!-- chips injected by buildFilterChips() -->
@@ -242,7 +360,16 @@
 <div class="container" id="main">
   <div class="state-box"><div class="spinner"></div></div>
 </div>
-
+<div id="receipt-modal" onclick="closeReceipt()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;
+         flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px;">
+  <img id="receipt-full" src="" style="max-width:100%;max-height:80vh;border-radius:10px;object-fit:contain;" />
+  <a id="receipt-dl" href="" download target="_blank" onclick="event.stopPropagation()"
+     style="color:#fff;background:var(--green);padding:10px 24px;border-radius:99px;text-decoration:none;font-weight:600;">
+    ⬇ ダウンロード / Download
+  </a>
+  <div style="color:rgba(255,255,255,.6);font-size:12px;">タップして閉じる / Tap to close</div>
+</div>
 <script>
   const LIFF_ID = "{{LIFF_ID}}";
 
@@ -305,6 +432,109 @@
 
   const ui = () => UI[appLang] || UI.ja;
 
+  // ── Category colors (by id) ────────────────────────────
+  const CAT_COLORS = {
+    1: "#F5C842",   // 食費   Food        — yellow
+    2: "#4DB6AC",   // 交通費  Transport   — teal
+    3: "#81C784",   // 日用品  Daily items — green
+    4: "#D4A574",   // カフェ  Café        — sand
+    5: "#FF8A65",   // 外食   Dining out  — orange
+    6: "#9575CD",   // ショッピング Shopping — purple
+    7: "#90A4AE",   // その他  Other       — grey-blue
+  };
+  const fallbackColors = ["#F5C842","#4DB6AC","#81C784","#D4A574","#FF8A65","#9575CD","#90A4AE"];
+  function catColor(cat, idx) {
+    return CAT_COLORS[cat.id] || fallbackColors[idx % fallbackColors.length];
+  }
+
+  // ── Percentage distributor (largest remainder, always sums to 100) ───
+  function distributePercents(cats, total) {
+    const floats  = cats.map(c => (c.subtotal / total) * 100);
+    const floors  = floats.map(f => Math.floor(f));
+    let remainder = 100 - floors.reduce((a, b) => a + b, 0);
+    const diffs   = floats.map((f, i) => f - floors[i]);
+    diffs.map((d, i) => ({ d, i }))
+         .sort((a, b) => b.d - a.d)
+         .forEach(({ i }, rank) => { if (rank < remainder) floors[i]++; });
+    return floors;
+  }
+
+  // ── Donut chart builder ────────────────────────────────
+  function buildDonutChart(cats, total) {
+    const cx = 70, cy = 70, R = 60, r = 38;
+    let angle = -Math.PI / 2;
+    let paths = "";
+    let sliceIdx = 0;
+
+    const activeCatsForSlice = cats.filter(c => c.subtotal > 0);
+
+    if (activeCatsForSlice.length === 1) {
+      // Full circle — SVG arc can't draw 360°, use two circles instead
+      const cat   = activeCatsForSlice[0];
+      const color = catColor(cat, cats.indexOf(cat));
+      paths = `
+        <circle cx="${cx}" cy="${cy}" r="${R}" fill="${color}" id="dslice-0" style="cursor:pointer;touch-action:manipulation" onclick="highlightSlice(0)"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>`;
+      sliceIdx = 1;
+    } else {
+      cats.forEach((cat, idx) => {
+        if (!cat.subtotal) return;
+        const sweep = (cat.subtotal / total) * 2 * Math.PI;
+        const end   = angle + sweep;
+        const large = sweep > Math.PI ? 1 : 0;
+        const color = catColor(cat, idx);
+        const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+        const x2 = cx + R * Math.cos(end),   y2 = cy + R * Math.sin(end);
+        const x3 = cx + r * Math.cos(end),   y3 = cy + r * Math.sin(end);
+        const x4 = cx + r * Math.cos(angle), y4 = cy + r * Math.sin(angle);
+        paths += `<path id="dslice-${sliceIdx}" d="M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${large},0 ${x4},${y4} Z" fill="${color}" stroke="#fff" stroke-width="2" style="cursor:pointer;touch-action:manipulation" onclick="highlightSlice(${sliceIdx})"/>`;
+        angle = end;
+        sliceIdx++;
+      });
+    }
+
+    const activeCats = cats.filter(c => c.subtotal > 0);
+    const legendPcts = distributePercents(activeCats, total);
+    let legendIdx = 0;
+    const legendItems = activeCats.map((cat, idx) => {
+      const pct   = legendPcts[idx];
+      const color = catColor(cat, cats.indexOf(cat));
+      const li    = legendIdx++;
+      return `<div class="legend-item" id="dlegend-${li}" ontouchend="event.preventDefault();highlightSlice(${li})" onclick="highlightSlice(${li})">
+        <div class="legend-dot" style="background:${color}"></div>
+        <span class="legend-name">${cat.icon} ${cat.name}</span>
+        <span class="legend-pct">${pct}%</span>
+      </div>`;
+    }).join("");
+
+    return `<div class="donut-wrap">
+      <svg id="donut-svg" class="donut-svg" viewBox="0 0 140 140" width="130" height="130" style="flex-shrink:0;touch-action:manipulation;outline:none;-webkit-tap-highlight-color:transparent">${paths}</svg>
+      <div class="donut-legend">${legendItems}</div>
+    </div>`;
+  }
+
+  let _selectedSlice = -1;
+  function highlightSlice(idx) {
+    const svg = document.getElementById("donut-svg");
+    if (!svg) return;
+    if (_selectedSlice === idx) {
+      // deselect
+      _selectedSlice = -1;
+      svg.classList.remove("has-selection");
+      svg.querySelectorAll("path").forEach(p => p.classList.remove("selected"));
+      document.querySelectorAll(".legend-item").forEach(l => l.classList.remove("active"));
+    } else {
+      _selectedSlice = idx;
+      svg.classList.add("has-selection");
+      svg.querySelectorAll("path").forEach((p, i) => {
+        p.classList.toggle("selected", i === idx);
+      });
+      document.querySelectorAll(".legend-item").forEach((l, i) => {
+        l.classList.toggle("active", i === idx);
+      });
+    }
+  }
+
   // ── Filter chips ───────────────────────────────────────
   function buildFilterChips() {
     const bar = document.getElementById("filter-bar");
@@ -359,11 +589,129 @@
   }
 
   function updateMonthLabel() {
-    document.getElementById("month-label").textContent = ui().monthLabel(currentYear, currentMonth);
+    const now    = new Date();
+    const months = appLang === "en" ? MONTHS_EN : MONTHS_JA;
+    document.getElementById("year-display").textContent  = currentYear;
+    document.getElementById("month-display").textContent = appLang === "en"
+      ? months[currentMonth - 1]
+      : `${months[currentMonth - 1]}`;
 
-    const now   = new Date();
     const atNow = currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1;
     document.getElementById("next-btn").style.visibility = atNow ? "hidden" : "visible";
+  }
+
+  // ── Year picker ───────────────────────────────────────
+  const START_YEAR = 1920;
+
+  function buildYearOptions() {
+    const now   = new Date();
+    const years = [];
+    for (let y = now.getFullYear(); y >= START_YEAR; y--) years.push(y);
+    const title  = appLang === "en" ? "Select year" : "年を選択";
+    const picker = document.getElementById("year-picker");
+    picker.innerHTML = `
+      <div class="year-sheet-handle"></div>
+      <div class="year-sheet-title">${title}</div>
+      <div class="year-sheet-list">
+        ${years.map(y => `<div class="year-option${y === currentYear ? " selected" : ""}"
+          onclick="selectYear(${y})">${y}</div>`).join("")}
+      </div>`;
+  }
+
+  function lockScroll()   { document.body.style.overflow = "hidden"; }
+  function unlockScroll() { document.body.style.overflow = ""; }
+
+  function toggleYearPicker() {
+    const picker  = document.getElementById("year-picker");
+    const btn     = document.getElementById("year-btn");
+    const overlay = document.getElementById("year-overlay");
+    const isOpen  = picker.classList.contains("open");
+    if (isOpen) {
+      closeYearPicker();
+    } else {
+      buildYearOptions();
+      picker.classList.add("open");
+      btn.classList.add("open");
+      overlay.classList.add("open");
+      lockScroll();
+      requestAnimationFrame(() => {
+        const selected = picker.querySelector(".year-option.selected");
+        if (selected) selected.scrollIntoView({ block: "center" });
+      });
+    }
+  }
+
+  function closeYearPicker() {
+    document.getElementById("year-picker").classList.remove("open");
+    document.getElementById("year-btn").classList.remove("open");
+    document.getElementById("year-overlay").classList.remove("open");
+    unlockScroll();
+  }
+
+  function selectYear(year) {
+    closeYearPicker();
+    if (year === currentYear) return;
+    currentYear = year;
+    // clamp month to current month if we jumped to current year
+    const now = new Date();
+    if (currentYear === now.getFullYear() && currentMonth > now.getMonth() + 1) {
+      currentMonth = now.getMonth() + 1;
+    }
+    loadStats();
+  }
+
+  // ── Month picker ─────────────────────────────────────
+  function buildMonthOptions() {
+    const now    = new Date();
+    const months = appLang === "en" ? MONTHS_EN : MONTHS_JA;
+    const title  = appLang === "en" ? "Select month" : "月を選択";
+    const picker = document.getElementById("month-picker");
+    picker.innerHTML = `
+      <div class="year-sheet-handle"></div>
+      <div class="year-sheet-title">${title}</div>
+      <div class="year-sheet-list">
+        ${months.map((name, i) => {
+          const m = i + 1;
+          const disabled = currentYear === now.getFullYear() && m > now.getMonth() + 1;
+          if (disabled) return "";
+          return `<div class="year-option${m === currentMonth ? " selected" : ""}"
+            onclick="selectMonth(${m})">${name}</div>`;
+        }).join("")}
+      </div>`;
+  }
+
+  function toggleMonthPicker() {
+    const picker  = document.getElementById("month-picker");
+    const btn     = document.getElementById("month-btn");
+    const overlay = document.getElementById("month-overlay");
+    const isOpen  = picker.classList.contains("open");
+    if (isOpen) {
+      closeMonthPicker();
+    } else {
+      buildMonthOptions();
+      picker.classList.add("open");
+      btn.classList.add("open");
+      overlay.classList.add("open");
+      lockScroll();
+      requestAnimationFrame(() => {
+        const selected = picker.querySelector(".year-option.selected");
+        if (selected) selected.scrollIntoView({ block: "center" });
+      });
+    }
+  }
+
+  function closeMonthPicker() {
+    document.getElementById("month-picker").classList.remove("open");
+    document.getElementById("month-btn").classList.remove("open");
+    document.getElementById("month-overlay").classList.remove("open");
+    unlockScroll();
+  }
+
+  function selectMonth(month) {
+    closeMonthPicker();
+    if (month === currentMonth) return;
+    currentMonth = month;
+    loadStats();
   }
 
   // ── Payment filter ────────────────────────────────────
@@ -465,18 +813,37 @@
       return;
     }
 
-    const total     = data.total;
-    const openNames = getOpenCategories();
+    // reset highlight state on every render (fix: stale idx across month changes)
+    _selectedSlice = -1;
+
+    const total      = data.total;
+    const openNames  = getOpenCategories();
+
+    // sort once — both donut and list use the same order (fix: color mismatch)
+    const sortedCats = sortCategories(data.by_category);
+
+    const donutHtml = buildDonutChart(sortedCats, total);
+
+    const rowPcts = total > 0 ? distributePercents(sortedCats, total) : sortedCats.map(() => 0);
 
     let catsHtml = "";
-    sortCategories(data.by_category).forEach((cat, idx) => {
-      const pct     = total > 0 ? Math.round((cat.subtotal / total) * 100) : 0;
+    sortedCats.forEach((cat, idx) => {
+      const pct     = rowPcts[idx];
+      const color   = catColor(cat, idx);
       const sorted  = sortTransactions(cat.transactions || []);
       const wasOpen = openNames.has(cat.name);
 
       let txnsHtml = "";
       sorted.forEach(tx => {
         const note = tx.note ? `<div class="txn-note">💬 ${tx.note}</div>` : "";
+        const receipt = tx.has_receipt
+          ? `<button class="receipt-btn" onclick="openReceipt(${tx.id})" title="レシート">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>`
+          : "";
         txnsHtml += `
           <div class="txn-item" id="txn-${tx.id}">
             <div class="txn-left">
@@ -486,7 +853,10 @@
             </div>
             <div class="txn-right">
               <div class="txn-amount">¥${tx.amount.toLocaleString()}</div>
-              <button class="txn-delete" onclick="deleteTxn(${tx.id}, this)" title="🗑">🗑</button>
+              <div class="txn-actions">
+                ${receipt}
+                <button class="txn-delete" onclick="deleteTxn(${tx.id}, this)" title="削除">🗑</button>
+              </div>
             </div>
           </div>`;
       });
@@ -504,7 +874,7 @@
               <div class="cat-pct-text">${pct}% · ${ui().items(cat.count)}</div>
             </div>
           </div>
-          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
           <div class="txn-list">${txnsHtml}</div>
         </div>`;
     });
@@ -522,6 +892,7 @@
       </div>
       <div class="card">
         <div class="card-title">${ui().byCategory}</div>
+        ${donutHtml}
         <div class="cat-list">${catsHtml}</div>
       </div>`;
   }
@@ -556,6 +927,18 @@
   function showError(msg) {
     document.getElementById("main").innerHTML =
       `<div class="state-box"><div class="icon">⚠️</div><div>${msg}</div></div>`;
+  }
+  async function openReceipt(txnId) {
+    const resp = await fetch(`/api/receipt/${txnId}`, {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+    const { url } = await resp.json();
+    document.getElementById("receipt-full").src = url;
+    document.getElementById("receipt-dl").onclick = () => liff.openWindow({ url, external: true });
+    document.getElementById("receipt-modal").style.display = "flex";
+  }
+  function closeReceipt() {
+    document.getElementById("receipt-modal").style.display = "none";
   }
 </script>
 </body>

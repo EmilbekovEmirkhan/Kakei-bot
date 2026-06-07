@@ -1,7 +1,8 @@
+import asyncio
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from datetime import datetime
-from app.config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_REGION
+from app.config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, AWS_REGION, ENV
 
 _s3_client = None
 
@@ -20,11 +21,12 @@ def get_s3_client():
 async def upload_receipt_image(uid: str, image_bytes: bytes, message_id: str) -> str:
     """Upload receipt image to S3 and return the object URL."""
     now = datetime.now()
-    key = f"receipts/{uid}/{now.year}/{now.month:02d}/{now.strftime('%Y%m%d_%H%M%S')}_{message_id}.jpg"
+    key = f"receipts/{ENV}/{uid}/{now.year}/{now.month:02d}/{now.strftime('%Y%m%d_%H%M%S')}_{message_id}.jpg"
 
     try:
         s3 = get_s3_client()
-        s3.put_object(
+        await asyncio.to_thread(
+            s3.put_object,
             Bucket=AWS_S3_BUCKET,
             Key=key,
             Body=image_bytes,

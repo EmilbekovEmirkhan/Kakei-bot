@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 
@@ -43,6 +44,7 @@ async def get_monthly_stats(
     async with pool.acquire() as conn:
         category_rows = await conn.fetch("""
             SELECT
+                c.id    AS category_id,
                 c.name  AS category_name,
                 c.icon  AS category_icon,
                 COALESCE(SUM(t.amount), 0) AS subtotal,
@@ -63,6 +65,7 @@ async def get_monthly_stats(
                 t.amount,
                 t.note,
                 t.transacted_at,
+                t.receipt_image_url,
                 c.name  AS category_name,
                 c.icon  AS category_icon,
                 p.name  AS payment_name,
@@ -91,6 +94,7 @@ async def get_monthly_stats(
             "note": t["note"] or "",
             "date": t["transacted_at"].strftime("%Y-%m-%d"),
             "payment": (t["payment_icon"] or "") + " " + (t["payment_name"] or ""),
+            "has_receipt": t["receipt_image_url"] is not None,
         })
 
     stats = {
@@ -100,6 +104,7 @@ async def get_monthly_stats(
         "count": count,
         "by_category": [
             {
+                "id": row["category_id"],
                 "name": row["category_name"] or "その他",
                 "icon": row["category_icon"] or "📦",
                 "subtotal": int(row["subtotal"]),
@@ -120,6 +125,17 @@ async def get_monthly_stats(
     )
 
     return stats
+
+async def get_receipt_image_url(txn_id: int, uid: str) -> str | None:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT receipt_image_url
+            FROM transactions
+            WHERE id = $1 AND uid = $2
+        """, txn_id, uid)
+
+    return row["receipt_image_url"] if row else None
 
 async def delete_transaction(uid: str, transaction_id: int) -> bool:
     """
@@ -147,7 +163,7 @@ async def delete_transaction(uid: str, transaction_id: int) -> bool:
     )
 
     if row["receipt_image_url"]:
-        delete_receipt_image(row["receipt_image_url"])
+        await asyncio.to_thread(delete_receipt_image, row["receipt_image_url"])
 
     return True
 
