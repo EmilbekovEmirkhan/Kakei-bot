@@ -40,12 +40,13 @@ _S: dict[str, dict[str, str]] = {
         "manual_ask_confirm":   "以下の内容で登録しますか？\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}",
 
         # ── Receipt review ──────────────────────────────────
-        "receipt_review":       "🧾 {store}\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\n\n内容を確認してください",
+        "receipt_review":       "🧾 {store}\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}\n\n内容を確認してください",
         "receipt_ask_date":     "📅 日付を確認してください\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 カテゴリを確認してください\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 支払方法を確認してください\n\n{label_scanned}: {payment}",
-        "receipt_ask_amount":   "💴 金額を確認してください\n\n{label_scanned}: {amount}",
-        "receipt_ask_note":     "📝 メモを追加しますか？",
+        "receipt_ask_amount":          "💴 金額を確認してください\n\n{label_scanned}: {amount}",
+        "receipt_amount_not_detected": "❌ レシートから金額を読み取れませんでした。\n正しい金額を入力してください。",
+        "receipt_ask_note":            "📝 メモを追加しますか？",
         "receipt_ask_confirm":  "以下の内容で登録しますか？\n\n日付: {date}\nカテゴリ: {category}\n支払方法: {payment}\n金額: {amount}\nメモ: {note}",
 
         # ── Input prompts ───────────────────────────────────
@@ -66,6 +67,9 @@ _S: dict[str, dict[str, str]] = {
         "invalid_action_manual":"❌ 入力状態が正しくありません。「手動で入力」からもう一度始めてください。",
         "restart_receipt":      "最初からやり直します。レシートをもう一度送ってください。",
         "date_error":           "❌ 日付を取得できませんでした。もう一度お試しください。",
+        "date_out_of_bounds_error": "❌ 日付が範囲外です。\n別の日付を選択してください（1920-01-01以降、今日以前）。",
+        "date_nonexistent_error":   "❌ 存在しない日付です。\n別の日付を選択してください。",
+        "date_not_detected_error":  "❌ レシートから日付を読み取れませんでした。\n日付を選択してください。",
         "category_error":       "❌ カテゴリを取得できませんでした。もう一度お試しください。",
         "payment_error":        "❌ 支払方法を取得できませんでした。もう一度お試しください。",
         "unknown_message":      "💡 レシートの写真を送るか「使い方」と入力してください",
@@ -83,7 +87,8 @@ _S: dict[str, dict[str, str]] = {
             "   メニュー →「マイプロフィール」\n"
             "   月別・カテゴリ別で集計表示！\n\n"
             "━━━━━━━━━━━━\n"
-            "💡 言語変更:「言語変更」と送信"
+            "💡 言語変更:「言語変更」と送信\n\n"
+            "📌 メニューが表示されない場合は、一度このチャットを閉じて、もう一度開いてください。"
         ),
 
         # ── Rate limiting ───────────────────────────────────
@@ -126,12 +131,13 @@ _S: dict[str, dict[str, str]] = {
         "manual_ask_confirm":   "Save this entry?\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}",
 
         # ── Receipt review ──────────────────────────────────
-        "receipt_review":       "🧾 {store}\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\n\nPlease review your receipt",
+        "receipt_review":       "🧾 {store}\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}\n\nPlease review your receipt",
         "receipt_ask_date":     "📅 Confirm the date\n\n{label_scanned}: {date}",
         "receipt_ask_category": "📂 Confirm the category\n\n{label_scanned}: {category}",
         "receipt_ask_payment":  "💳 Confirm payment method\n\n{label_scanned}: {payment}",
-        "receipt_ask_amount":   "💴 Confirm the amount\n\n{label_scanned}: {amount}",
-        "receipt_ask_note":     "📝 Would you like to add a note?",
+        "receipt_ask_amount":          "💴 Confirm the amount\n\n{label_scanned}: {amount}",
+        "receipt_amount_not_detected": "❌ We couldn't read the amount from the receipt.\nPlease enter the correct amount.",
+        "receipt_ask_note":            "📝 Would you like to add a note?",
         "receipt_ask_confirm":  "Save this entry?\n\nDate: {date}\nCategory: {category}\nPayment: {payment}\nAmount: {amount}\nNote: {note}",
 
         # ── Input prompts ───────────────────────────────────
@@ -152,6 +158,9 @@ _S: dict[str, dict[str, str]] = {
         "invalid_action_manual":"❌ Invalid state. Please tap Manual Entry to start again.",
         "restart_receipt":      "Starting over. Please send the receipt again.",
         "date_error":           "❌ Could not get the date. Please try again.",
+        "date_out_of_bounds_error": "❌ The dates are out of bounds.\nPlease select another date (after 1920-01-01 and before today).",
+        "date_nonexistent_error":   "❌ This date does not exist.\nPlease select another date.",
+        "date_not_detected_error":  "❌ Could not detect the date from the receipt.\nPlease select it manually.",
         "category_error":       "❌ Could not get the category. Please try again.",
         "payment_error":        "❌ Could not get the payment method. Please try again.",
         "unknown_message":      "💡 Send a receipt photo or type \"help\"",
@@ -169,7 +178,8 @@ _S: dict[str, dict[str, str]] = {
             "   Menu → \"My Profile\"\n"
             "   Monthly breakdown by category!\n\n"
             "━━━━━━━━━━━━\n"
-            "💡 Change language: type \"change language\""
+            "💡 Change language: type \"change language\"\n\n"
+            "📌 If you cannot see the menu, please leave this chat and open it again."
         ),
 
         # ── Rate limiting ───────────────────────────────────

@@ -52,6 +52,8 @@ Visa/Mastercard/JCB/AMEX/card/クレジット = 2.
 現金/お預り/お釣り = 1.
 """
 
+TIMEOUT_MS = 90000
+
 _client: genai.Client | None = None
 
 
@@ -62,7 +64,7 @@ def _get_client() -> genai.Client:
         if not GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY is not set")
 
-        _client = genai.Client(api_key=GEMINI_API_KEY)
+        _client = genai.Client(api_key=GEMINI_API_KEY, http_options={"timeout": TIMEOUT_MS})
 
     return _client
 
@@ -109,7 +111,7 @@ def _safe_int(value) -> int | None:
 
     return None
 
-def _normalize_store_name(value) -> str:
+def _normalize_store_name(value) -> str | None:
     if not isinstance(value, str):
         return None
 
@@ -180,10 +182,12 @@ def parse_receipt_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
     if not isinstance(data, dict):
         raise ValueError(f"Gemini returned non-object JSON: {data}")
 
+    raw_amount = _safe_int(data.get("a"))
+
     return {
         "store_name": _normalize_store_name(data.get("s")),
         "category_id": _normalize_category_id(data.get("c")),
-        "amount": _safe_int(data.get("a")),
+        "amount": raw_amount if raw_amount is not None and raw_amount > 0 else None,
         "date": _normalize_date(data.get("d")),
         "payment_method_id": _normalize_payment_method_id(data.get("p")),
     }
